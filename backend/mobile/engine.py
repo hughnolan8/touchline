@@ -10,6 +10,7 @@ from backend.engine import (history, generate_predictions, opportunities, place_
                             portfolios, seconds)
 from backend.models import evaluate, fit_dc
 from backend.providers import PublicFiles, football_csv
+from backend.external_features import fetch_understat, fetch_clubelo, import_understat, import_clubelo
 from .provider import MobileOdds
 from .store import transaction, acquire, release, LEAGUES, DATA_DEFAULTS
 
@@ -36,6 +37,13 @@ def schedule(at):
             season = f'{year % 100:02}{(year + 1) % 100:02}'
             enqueue(c, f'current:{comp}:{six_hour}', 'file',
                     {'url': f'https://www.football-data.co.uk/mmz4281/{season}/{comp}.csv'}, 30, at)
+            # External features refresh daily. Understat contributes completed-match
+            # xG/xGA for training; ClubElo contributes dated ratings to upcoming fixtures.
+            day = at[:10]
+            enqueue(c, f'understat:{comp}:{season}:{day}', 'understat',
+                    {'competition': comp, 'season': season}, 28, at)
+            enqueue(c, f'clubelo:{day}', 'clubelo',
+                    {'date': day}, 18, at)
             archive_pending = c.execute("SELECT 1 FROM mobile_jobs WHERE id LIKE ? AND status IN ('queued','running') LIMIT 1", (f'archive:{comp}:%',)).fetchone()
             if not archive_pending:
                 enqueue(c, f'train:{comp}:{int(dt.timestamp()) // (7 * 86400)}', 'train', {'competition': comp}, 35, at)
@@ -83,6 +91,15 @@ def run_job(job):
             return getattr(provider, job['kind'])(payload['competition'])
         finally:
             provider.close()
+    if job['kind'] == 'understat':
+        comp=payload['competition']
+        body=fetch_understat(comp,payload['season'])
+        with connect() as c:
+            return f'{import_understat(c,comp,body)} Understat matches enriched'
+    if job['kind'] == 'clubelo':
+        body=fetch_clubelo(payload['date'])
+        with connect() as c:
+            return f'{import_clubelo(c,body)} ClubElo ratings applied'
     if job['kind'] == 'file':
         provider = PublicFiles()
         try:

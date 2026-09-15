@@ -44,7 +44,7 @@ def generate_predictions(at=None):
             data=model_payloads[model['id']]
             if model['id'] not in model_histories:model_histories[model['id']]=history(c,match['competition'],model['cutoff'])
             records=model_histories[model['id']]
-            prediction=predict(data,records,match['home'],match['away'])
+            prediction=predict(data,records,match['home'],match['away'],match['kickoff'],json.loads(match['stats']))
             if not prediction:continue
             features={'home':match['home'],'away':match['away'],'stats':json.loads(match['stats']),'training_cutoff':model['cutoff'],'forecast_date':at[:10]}
             c.execute('INSERT OR IGNORE INTO predictions(match_id,model_id,created_at,kickoff,payload,features) VALUES(?,?,?,?,?,?)',(match['id'],model['id'],at,match['kickoff'],dump(prediction),dump(features)))
