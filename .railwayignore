@@ -1,0 +1,15 @@
+.git
+.agents
+.codex
+.env*
+data
+.pythonenv
+.venv
+ios
+node_modules
+.qodo
+.pytest_cache
+**/__pycache__
+**/*.pyc
+docs
+tests

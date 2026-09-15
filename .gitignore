@@ -1,0 +1,17 @@
+.env*
+.DS_Store
+*.pem
+/data/
+/.pythonenv/
+/.venv/
+/.agents/
+/.codex/
+/.railway/
+/.qodo/
+/outputs/
+/work/
+__pycache__/
+.pytest_cache/
+/ios/build/
+**/xcuserdata/
+*.xcuserstate
