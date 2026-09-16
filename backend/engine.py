@@ -1,10 +1,15 @@
 """Premier League forecasts, discrepancies, and paper ledger."""
 import json,math,sqlite3
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .db import connect,rows,now,dump,setting,set_setting
 from .models import fit_dixon_coles,predict_1x2
 LEAGUE='E0';STARTING_BANKROLL=1000.;KELLY_FRACTION=.25;MAX_BET_FRACTION=.02;MIN_FALLBACK_STAKE=1.
 def seconds(a,b):return (datetime.fromisoformat(a)-datetime.fromisoformat(b)).total_seconds()
+def is_bet_day(kickoff,at):
+ """Only wager before kick-off on the fixture's UK calendar day."""
+ london=ZoneInfo('Europe/London');kickoff=datetime.fromisoformat(kickoff).astimezone(london);at=datetime.fromisoformat(at).astimezone(london)
+ return at.date()==kickoff.date() and at<kickoff
 def history(c,cutoff):
  r=[]
  for x in rows(c,"SELECT id,home,away,kickoff,stats FROM matches WHERE competition='E0' AND status='finished' AND kickoff<? ORDER BY kickoff",(cutoff,)):
@@ -49,6 +54,7 @@ def account(c):
 def place_required_bet(c,m,p,at=None):
  at=at or now()
  if c.execute("SELECT 1 FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone():return 'already placed'
+ if not is_bet_day(m['kickoff'],at):return 'blocked: fixture is not being played today'
  choices=discrepancies(c,m,p)
  if not choices:set_setting(c,'blocked:'+m['id'],{'at':at,'reason':'No complete verified 1X2 market'});return 'blocked: odds unavailable'
  x=max(choices,key=lambda x:x['edge']);wallet=account(c);k=max(0,(x['probability']*x['odds']-1)/(x['odds']-1));stake=max(MIN_FALLBACK_STAKE,math.floor(wallet['balance']*k*KELLY_FRACTION*100)/100);stake=min(stake,math.floor(min(wallet['available'],wallet['balance']*MAX_BET_FRACTION)*100)/100)
