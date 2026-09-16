@@ -42,9 +42,13 @@ def initialize():
 @contextmanager
 def transaction():
     with connect() as c:
-        c.execute('BEGIN IMMEDIATE')
         if os.environ.get('DATABASE_URL'):
+            # psycopg opens the transaction on the first statement.  Sending
+            # BEGIN here can therefore produce "already a transaction in
+            # progress" in PostgreSQL.
             c.execute('SELECT pg_advisory_xact_lock(814729301)')
+        else:
+            c.execute('BEGIN IMMEDIATE')
         yield c
 
 

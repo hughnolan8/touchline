@@ -67,8 +67,6 @@ class Connection:
         if statement.strip().upper().startswith("BEGIN"):
             self.in_transaction = True
         cursor = Cursor(self.connection.cursor(row_factory=dict_row)).execute(statement, params)
-        if statement.strip().upper() == "BEGIN IMMEDIATE" and os.environ.get("MOBILE_PROCESS") == "1":
-            self.connection.execute("SELECT pg_advisory_xact_lock(814729301)")
         return cursor
 
     def commit(self):

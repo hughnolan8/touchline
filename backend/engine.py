@@ -1,5 +1,5 @@
 """Premier League forecasts, discrepancies, and paper ledger."""
-import json,math,sqlite3
+import json,math,os,sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from .db import connect,rows,now,dump,setting,set_setting
@@ -66,7 +66,11 @@ def place_required_bet(c,m,p,at=None):
 def settle(at=None):
  at=at or now();n=0
  with connect() as c:
-  c.execute('BEGIN IMMEDIATE')
+  if os.environ.get('DATABASE_URL'):
+   # psycopg starts a transaction for this statement; use the advisory lock
+   # instead of issuing a second BEGIN on PostgreSQL.
+   c.execute('SELECT pg_advisory_xact_lock(814729301)')
+  else:c.execute('BEGIN IMMEDIATE')
   for b in rows(c,"SELECT b.*,m.status match_status,m.stats FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review')"):
    if b['match_status']=='cancelled':state='void'
    elif b['match_status']!='finished':continue
