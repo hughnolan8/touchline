@@ -44,6 +44,11 @@ with httpx.Client(timeout=40, follow_redirects=False) as client:
     print('Mode:', summary['mode'], 'Engine:', engine['status'])
     print('Last automatic completion:', engine['last_success'])
     print('Trained leagues:', ', '.join(engine['trained_leagues']) or 'none')
+    if engine['status'] in ('degraded', 'overdue'):
+        print('Recent worker jobs:')
+        for job in engine['jobs']:
+            if job['status'] != 'done' or job['message']:
+                print(f"- {job['id']}: {job['status']} ({job['message'] or 'no message'})")
     if args.require_fresh:
         last = datetime.fromisoformat(engine['last_success']) if engine['last_success'] else None
         assert last and 0 <= (datetime.now(timezone.utc)-last).total_seconds() <= 900, 'Automatic engine heartbeat is overdue'

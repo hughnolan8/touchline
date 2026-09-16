@@ -10,7 +10,7 @@ from backend.engine import (history, generate_predictions, opportunities, place_
                             portfolios, seconds)
 from backend.models import evaluate, fit_dc
 from backend.providers import PublicFiles, football_csv
-from backend.external_features import fetch_understat, fetch_clubelo, import_understat, import_clubelo
+from backend.external_features import fetch_understat, import_understat
 from .provider import MobileOdds
 from .store import transaction, acquire, release, LEAGUES, DATA_DEFAULTS
 
@@ -25,7 +25,23 @@ def schedule(at):
     year = dt.year if dt.month >= 7 else dt.year - 1
     six_hour = int(dt.timestamp()) // 21600
     with transaction() as c:
+        # Earlier releases used football-data's compact season code here
+        # (for example, 2526).  Understat expects the season's starting
+        # calendar year (2025), so retire those obsolete jobs before adding
+        # their correctly formed replacements below.
+        for job in c.execute("SELECT id, payload FROM mobile_jobs WHERE kind='understat' AND status IN ('queued', 'failed')"):
+            try:
+                understat_season = int(json.loads(job['payload']).get('season'))
+            except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+                understat_season = None
+            if understat_season is None or not 2014 <= understat_season <= dt.year:
+                c.execute("UPDATE mobile_jobs SET status='superseded', finished_at=?, message='Superseded obsolete Understat season job' WHERE id=?",
+                          (at, job['id']))
+            elif not job['id'].endswith(':json-v2'):
+                c.execute("UPDATE mobile_jobs SET status='superseded', finished_at=?, message='Superseded by JSON Understat collector' WHERE id=?",
+                          (at, job['id']))
         cfg = {**DATA_DEFAULTS, **setting(c, 'odds_api_config', {})}
+        strategy = setting(c, 'strategy')
         if cfg['auto_refresh'] and os.environ.get('MOBILE_ODDS_API_KEY'):
             enqueue(c, f'quota:{six_hour}', 'quota', {}, -1, at)
         for comp in LEAGUES:
@@ -37,26 +53,48 @@ def schedule(at):
             season = f'{year % 100:02}{(year + 1) % 100:02}'
             enqueue(c, f'current:{comp}:{six_hour}', 'file',
                     {'url': f'https://www.football-data.co.uk/mmz4281/{season}/{comp}.csv'}, 30, at)
-            # External features refresh daily. Understat contributes completed-match
-            # xG/xGA for training; ClubElo contributes dated ratings to upcoming fixtures.
+            # The external feature refreshes daily and contributes completed-match
+            # xG/xGA for training.
             day = at[:10]
-            enqueue(c, f'understat:{comp}:{season}:{day}', 'understat',
-                    {'competition': comp, 'season': season}, 28, at)
-            enqueue(c, f'clubelo:{day}', 'clubelo',
-                    {'date': day}, 18, at)
+            enqueue(c, f'understat:{comp}:{year}:{day}:json-v2', 'understat',
+                    {'competition': comp, 'season': year}, 28, at)
             archive_pending = c.execute("SELECT 1 FROM mobile_jobs WHERE id LIKE ? AND status IN ('queued','running') LIMIT 1", (f'archive:{comp}:%',)).fetchone()
             if not archive_pending:
                 enqueue(c, f'train:{comp}:{int(dt.timestamp()) // (7 * 86400)}', 'train', {'competition': comp}, 35, at)
             if not cfg['auto_refresh'] or not os.environ.get('MOBILE_ODDS_API_KEY'):
                 continue
-            outstanding = c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.competition=? AND m.kickoff<? LIMIT 1",
-                                    (comp, (dt - timedelta(minutes=100)).isoformat())).fetchone()
-            if outstanding:
-                enqueue(c, f'scores:{comp}:{int(dt.timestamp()) // 1800}', 'scores', {'competition': comp}, 0, at)
-            active = c.execute("SELECT 1 FROM matches WHERE competition=? AND status='scheduled' AND kickoff>? AND kickoff<? LIMIT 1",
-                               (comp, at, (dt + timedelta(minutes=90)).isoformat())).fetchone()
-            bucket = int(dt.timestamp()) // (cfg['interval_minutes'] * 60) if active else six_hour
-            enqueue(c, f'odds:{comp}:{"active" if active else "discovery"}:{bucket}', 'odds', {'competition': comp}, 10 if active else 20, at)
+            # A daily odds snapshot cannot safely drive a 15-minute quote-age
+            # strategy. Refresh only when a confirmed fixture is in the entry
+            # window, keeping provider usage proportional to actionable work.
+            window_start = (dt + timedelta(minutes=strategy['window_end'])).isoformat()
+            window_end = (dt + timedelta(minutes=strategy['window_start'])).isoformat()
+            upcoming = c.execute('''SELECT 1 FROM matches
+                WHERE competition=? AND status='scheduled' AND time_confirmed=1
+                  AND kickoff>=? AND kickoff<=? LIMIT 1''', (comp, window_start, window_end)).fetchone()
+            if upcoming:
+                bucket = int(dt.timestamp()) // (cfg['interval_minutes'] * 60)
+                enqueue(c, f'odds:{comp}:window:{bucket}', 'odds', {'competition': comp}, 20, at)
+        # Daily odds jobs came from the former snapshot scheduler. Do not let
+        # one become runnable after deploying the fixture-window collector.
+        c.execute("UPDATE mobile_jobs SET status='superseded',finished_at=?,message='Superseded by fixture-window odds collector' WHERE kind='odds' AND id LIKE ? AND status='queued'", (at, 'odds:%:daily:%'))
+        # Targeted result collection is independent of the six-hour maintenance
+        # import. It only runs for leagues with an overdue open paper bet, so
+        # settlement is not delayed by an otherwise healthy, sparse schedule.
+        result_bucket = int(dt.timestamp()) // (cfg['interval_minutes'] * 60)
+        overdue = rows(c, '''SELECT DISTINCT m.competition,m.kickoff FROM bets b
+            JOIN matches m ON m.id=b.match_id
+            WHERE b.status IN ('open','review') AND m.status='scheduled'
+              AND m.kickoff<=?''', (at,))
+        for result in overdue:
+            kickoff = datetime.fromisoformat(result['kickoff'])
+            result_year = kickoff.year if kickoff.month >= 7 else kickoff.year - 1
+            season = f'{result_year % 100:02}{(result_year + 1) % 100:02}'
+            enqueue(c, f"result:{result['competition']}:{result_bucket}", 'result',
+                    {'competition': result['competition'],
+                     'url': f"https://www.football-data.co.uk/mmz4281/{season}/{result['competition']}.csv"}, 0, at)
+        # Results are now handled by the targeted collector above. Retire old
+        # generic score jobs so they cannot obscure actionable result status.
+        c.execute("UPDATE mobile_jobs SET status='superseded',finished_at=?,message='Superseded: results come from football-data' WHERE kind='scores' AND status IN ('queued','running')", (at,))
         enqueue(c, f'fixtures:{six_hour}', 'file', {'url': 'https://www.football-data.co.uk/fixtures.csv'}, 25, at)
         # Bounded retention for completed periodic work; archive checkpoints are permanent.
         cutoff = (dt - timedelta(days=14)).isoformat()
@@ -70,9 +108,9 @@ def claim(at, training=None, lease_seconds=280):
         c.execute("UPDATE mobile_jobs SET status='failed',finished_at=?,available_at=?,message='Repeated process interruption; retry on the next maintenance cycle' WHERE status='running' AND lease_until<=? AND attempts>=3",
                   (at, (datetime.fromisoformat(at)+timedelta(days=1)).isoformat(), at))
         c.execute("UPDATE mobile_jobs SET status='queued',message='Recovered after interrupted run' WHERE status='running' AND lease_until<=?", (at,))
-        # Old odds/scores tasks must not drain credits in a catch-up storm.
+        # Old odds tasks must not drain credits in a catch-up storm.
         cutoff = (datetime.fromisoformat(at) - timedelta(minutes=30)).isoformat()
-        c.execute("UPDATE mobile_jobs SET status='superseded',finished_at=? WHERE kind IN ('odds','scores') AND status='queued' AND available_at<?", (at, cutoff))
+        c.execute("UPDATE mobile_jobs SET status='superseded',finished_at=? WHERE kind='odds' AND status='queued' AND available_at<?", (at, cutoff))
         kind_filter = " AND kind='train'" if training is True else " AND kind!='train'" if training is False else ""
         job = c.execute("SELECT * FROM mobile_jobs WHERE status='queued' AND available_at<=?" + kind_filter + " ORDER BY priority,available_at,id LIMIT 1", (at,)).fetchone()
         if not job:
@@ -83,7 +121,7 @@ def claim(at, training=None, lease_seconds=280):
 
 def run_job(job):
     payload = json.loads(job['payload'])
-    if job['kind'] in ('odds', 'scores', 'quota'):
+    if job['kind'] in ('odds', 'quota'):
         provider = MobileOdds()
         try:
             if job['kind'] == 'quota':
@@ -96,10 +134,6 @@ def run_job(job):
         body=fetch_understat(comp,payload['season'])
         with connect() as c:
             return f'{import_understat(c,comp,body)} Understat matches enriched'
-    if job['kind'] == 'clubelo':
-        body=fetch_clubelo(payload['date'])
-        with connect() as c:
-            return f'{import_clubelo(c,body)} ClubElo ratings applied'
     if job['kind'] == 'file':
         provider = PublicFiles()
         try:
@@ -115,6 +149,28 @@ def run_job(job):
             if not status or status['status'] != 'ok':
                 raise ValueError('Public source temporarily unavailable')
             return f'{count} source records processed'
+        finally:
+            provider.client.close()
+    if job['kind'] == 'result':
+        provider = PublicFiles()
+        try:
+            r = provider.client.get('https://www.football-data.co.uk/robots.txt')
+            r.raise_for_status()
+            robots = RobotFileParser()
+            robots.parse(r.text.splitlines())
+            if not robots.can_fetch('TouchlineResearch', payload['url']):
+                raise ValueError('Public result source collection is unavailable under its access rules')
+            with connect() as c:
+                before = c.execute('''SELECT COUNT(*) count FROM bets b JOIN matches m ON m.id=b.match_id
+                    WHERE b.status IN ('open','review') AND m.competition=? AND m.status='scheduled'
+                      AND m.kickoff<=?''', (payload['competition'], now())).fetchone()['count']
+                provider.fetch(c, payload['url'], 'football-data', football_csv)
+                remaining = c.execute('''SELECT COUNT(*) count FROM bets b JOIN matches m ON m.id=b.match_id
+                    WHERE b.status IN ('open','review') AND m.competition=? AND m.status='scheduled'
+                      AND m.kickoff<=?''', (payload['competition'], now())).fetchone()['count']
+            if remaining:
+                return f'Awaiting verified final score for {remaining} open bet(s)'
+            return f'Verified final result collected for {before} open bet(s)'
         finally:
             provider.client.close()
     if job['kind'] == 'train':
@@ -220,9 +276,14 @@ def tick(max_seconds=200, max_jobs=8, include_training=True):
                 complete(job, message=message)
             except Exception as exc:
                 complete(job, error=exc)
-                errors += 1
+                # These are optional research enrichments.  They may be
+                # unavailable or change independently of the live odds and
+                # settlement pipeline, so surface their retries without
+                # declaring the paper engine unhealthy.
+                if job['kind'] != 'understat':
+                    errors += 1
             processed += 1
-            if job['kind'] in ('odds', 'scores', 'train'):
+            if job['kind'] in ('odds', 'train'):
                 generate_predictions()
                 select_automatic()
                 settle()

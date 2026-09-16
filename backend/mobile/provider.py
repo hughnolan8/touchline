@@ -5,10 +5,9 @@ import math
 import os
 from datetime import datetime, timedelta
 import httpx
-from backend.db import connect, now, setting, set_setting, dump, quarantine
+from backend.db import connect, now, setting, set_setting, dump
 from backend.odds_api import OddsApiError, SPORTS, parse_events
-from backend.providers import ingest_match
-from .store import transaction, DATA_DEFAULTS, LEAGUES
+from .store import transaction, DATA_DEFAULTS
 
 
 class MobileOdds:
@@ -91,54 +90,3 @@ class MobileOdds:
             count = parse_events(c, events, competition, observed)
             set_setting(c, 'mobile_odds_' + competition, observed)
         return f'{count} fixtures with odds collected'
-
-    def scores(self, competition):
-        events, observed = self.request(f'/sports/{SPORTS[competition]}/scores', {'daysFrom': 3, 'dateFormat': 'iso'})
-        with connect() as c:
-            count = ingest_scores(c, events, competition, observed)
-        return f'{count} verified results collected'
-
-
-def ingest_scores(c, events, competition, observed):
-    if competition not in LEAGUES:
-        raise ValueError('Only regulation-time domestic league results are supported')
-    count = 0
-    for event in events:
-        c.execute('SAVEPOINT mobile_score')
-        try:
-            if not isinstance(event, dict):
-                raise ValueError('Invalid event')
-            if event.get('completed') is not True:
-                c.execute('RELEASE mobile_score')
-                continue
-            # Use exact provider identity and existing teams; never invent a match from a score.
-            match = c.execute('''SELECT m.*,h.name home_name,a.name away_name FROM matches m
-                JOIN match_aliases x ON x.match_id=m.id JOIN teams h ON h.id=m.home
-                JOIN teams a ON a.id=m.away WHERE x.source='the-odds-api' AND x.source_id=?''',
-                (event['id'],)).fetchone()
-            if not match or match['competition'] != competition:
-                c.execute('RELEASE mobile_score')
-                continue
-            if match['kickoff'] >= observed:
-                raise ValueError('Completed result precedes kickoff')
-            scores = event.get('scores') or []
-            if len(scores) != 2:
-                raise ValueError('Incomplete score')
-            values = {s['name']: int(s['score']) for s in scores if str(s.get('score', '')).isdigit()}
-            if set(values) != {event['home_team'], event['away_team']}:
-                raise ValueError('Scores do not match event participants')
-            from backend.providers import norm, ALIASES
-            if norm(ALIASES.get(event['home_team'], event['home_team'])) != match['home'] or norm(ALIASES.get(event['away_team'], event['away_team'])) != match['away']:
-                raise ValueError('Result teams conflict with fixture')
-            stats = {'hg': values[event['home_team']], 'ag': values[event['away_team']]}
-            result = ingest_match(c, 'the-odds-api', event['id'], competition,
-                                  event['home_team'], event['away_team'], match['kickoff'], True,
-                                  'finished', stats, observed)
-            if result:
-                count += 1
-            c.execute('RELEASE mobile_score')
-        except (ValueError, KeyError, TypeError):
-            c.execute('ROLLBACK TO mobile_score')
-            c.execute('RELEASE mobile_score')
-            quarantine(c, 'mobile-scores', 'Invalid or conflicting completed result', event)
-    return count

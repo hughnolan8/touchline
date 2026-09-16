@@ -81,7 +81,7 @@ def rolling_features(records, team, before=None, window=10):
     for r in matches:
         own=_team_value(r,team,'hg','ag');opp=_team_value(r,team,'ag','hg')
         if own is not None and opp is not None:gf.append(own);ga.append(opp)
-        own_xg=_team_value(r,team,'hxg','axg');opp_xg=_team_value(r,team,'axga','aga')
+        own_xg=_team_value(r,team,'hxg','axg');opp_xg=_team_value(r,team,'axg','hxg')
         own_sot=_team_value(r,team,'hst','ast');opp_sot=_team_value(r,team,'ast','hst')
         if own_xg is not None and opp_xg is not None:quality.append(own_xg-opp_xg)
         elif own_sot is not None and opp_sot is not None:quality.append((own_sot-opp_sot)/3.0)
@@ -140,14 +140,6 @@ def predict(model,records,home,away,before=None,match_stats=None):
     l,m=rm
     if model['selected']=='form':
         hf,af=form_factors(records,home,away,before);l*=hf;m*=af
-    # ClubElo is an optional pre-match prior. Keep its effect modest because
-    # the Dixon-Coles team effects already encode long-run strength.
-    if match_stats:
-        home_elo=match_stats.get('home_elo');away_elo=match_stats.get('away_elo')
-        if home_elo is not None and away_elo is not None:
-            delta=float(home_elo)-float(away_elo)
-            l*=math.exp(max(-.08,min(.08,.0005*delta)))
-            m*=math.exp(max(-.08,min(.08,-.0005*delta)))
     grid=score_grid(l,m,model['dc']['rho']);probs=outcome(grid)
     picks=[{'market':'1x2','selection':s,'line':None,'player':'','probability':p,'push':0} for s,p in zip(['home','draw','away'],probs)]
     totals=np.add.outer(np.arange(len(grid)),np.arange(len(grid)))
@@ -171,4 +163,3 @@ def predict(model,records,home,away,before=None,match_stats=None):
             'features':feature_snapshot(records,home,away,before),'selections':picks,
             'quality':'supported','player_status':'Requires verified player history and expected minutes',
             'sample_min':min(model['dc']['counts'][home],model['dc']['counts'][away])}
-

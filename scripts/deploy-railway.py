@@ -1,4 +1,4 @@
-"""Deploy only the iOS backend to the linked Railway project. Never resets data."""
+"""Deploy the Touchline website and backend services to Railway. Never resets data."""
 import argparse
 import json
 import os

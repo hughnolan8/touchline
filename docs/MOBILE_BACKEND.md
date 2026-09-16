@@ -1,12 +1,12 @@
 # Railway app backend
 
-The native iPhone app connects to `https://api-production-f10dd.up.railway.app`.
+The Touchline browser dashboard is served from the Railway API service's public domain.
 
 [Railway project](https://railway.com/project/f98e826d-67e5-4458-848a-86c7bb649689)
 
 | Service | Responsibility | Start command |
 | --- | --- | --- |
-| api | Authenticated iPhone API and health endpoints | Dockerfile default: Uvicorn on `$PORT` |
+| api | Website, authenticated dashboard API and health endpoints | Dockerfile default: Uvicorn on `$PORT` |
 | engine | Five-minute collection, predictions, entries and settlement | `python -m backend.runner --mode engine` |
 | trainer | One model-training job per cycle | `python -m backend.runner --mode trainer` |
 | Postgres | Durable jobs, models and paper ledger | Railway PostgreSQL template |
@@ -20,7 +20,7 @@ All services use the same Railway region and private database network. The three
 - Engine only: `MOBILE_ODDS_API_KEY`.
 - Trainer: no owner token or provider key.
 
-Private operator configuration is ignored at `data/mobile/railway.json`, with owner-only file permissions. Use the Railway CLI's `variable set KEY --stdin` for secrets. Never put them in Git, command arguments, logs, screenshots or Xcode settings. There is no external tick endpoint or scheduler credential.
+Private operator configuration is ignored at `data/mobile/railway.json`, with owner-only file permissions. Use the Railway CLI's `variable set KEY --stdin` for secrets. Never put them in Git, command arguments, logs or screenshots. There is no external tick endpoint or scheduler credential.
 
 ## Deployment
 

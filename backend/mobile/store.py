@@ -1,4 +1,4 @@
-"""Persistence and job coordination for the iOS backend."""
+"""Persistence and job coordination for the Touchline web backend."""
 import os
 import secrets
 from contextlib import contextmanager

@@ -206,4 +206,3 @@ def settle(at=None):
             snap=json.loads(b['snapshot']);profit=round(b['stake']*(snap['odds']-1),2) if result=='won' else -b['stake'] if result=='lost' else 0
             c.execute('UPDATE bets SET status=?,profit=?,settled_at=?,reason=? WHERE id=?',(result,profit,at,'Settled using verified full-time data',b['id']));count+=1
     return count
-

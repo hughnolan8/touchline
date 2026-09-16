@@ -1,20 +1,21 @@
-# Touchline for iPhone
+# Touchline web dashboard
 
-Native SwiftUI app for automatic football predictions and paper simulations. All balances and entries use virtual money.
+Browser dashboard for automatic football predictions and paper simulations. All balances and entries use virtual money.
 
 ## Project
 
-- `ios/Touchline.xcodeproj`: iPhone app, Keychain connection storage, portfolio, performance and engine settings.
+- `web/`: responsive dashboard served by the Railway API. The owner token exists only for the current browser session.
 - `backend/mobile/`: authenticated API, durable scheduling, provider budget and automatic selections.
 - `backend/`: models, source parsing, PostgreSQL adapter and transactional paper ledger.
 - `backend/runner.py`: autonomous engine and isolated training supervisors.
 - `Dockerfile` and `scripts/`: Railway deployment and verification.
 
-Railway hosts the API, engine, trainer and PostgreSQL. The server works while the phone is closed. Sports data comes from The Odds API and Football-Data.
+Railway hosts the website, API, engine, trainer and PostgreSQL. The engine works while no browser is open. Sports data comes from The Odds API and Football-Data.
 
 ## Install and operate
 
-See [iPhone setup](docs/IPHONE_SETUP.md), [backend operations](docs/MOBILE_BACKEND.md) and [reliability](docs/RELIABILITY.md).
+See [backend operations](docs/MOBILE_BACKEND.md) and [reliability](docs/RELIABILITY.md).
+
 
 ```sh
 python3.12 -m venv .pythonenv
@@ -22,7 +23,7 @@ python3.12 -m venv .pythonenv
 .pythonenv/bin/python -m pytest -q
 ```
 
-Open the Xcode project and run the Touchline scheme on your phone. Private configuration lives in ignored `data/mobile/railway.json`; credentials are never compiled into the app.
+Deploy to Railway, open the API service's public domain, and enter the private owner token when prompted. The token is not included in the website and is forgotten when the tab closes.
 
 ## Release
 
