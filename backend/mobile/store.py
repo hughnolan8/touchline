@@ -5,9 +5,8 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from backend.db import connect, init, now, setting, set_setting
 
-LEAGUES = ('E0', 'SP1', 'D1', 'I1', 'F1')
-DATA_DEFAULTS = dict(version=1, auto_refresh=True, interval_minutes=15,
-                     daily_credit_limit=100, quota_reserve=10)
+LEAGUES = ('E0',)
+DATA_DEFAULTS = dict(version=1)
 
 
 def configure():
@@ -37,7 +36,6 @@ def initialize():
             # Refuse accidentally reusing any database with existing activity.
             if c.execute('SELECT 1 FROM bets LIMIT 1').fetchone():
                 raise RuntimeError('Mobile database must start with an empty ledger')
-            set_setting(c, 'odds_api_config', DATA_DEFAULTS)
             set_setting(c, 'mobile_initialized', now())
 
 

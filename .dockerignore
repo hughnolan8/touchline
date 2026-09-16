@@ -3,5 +3,7 @@
 !requirements.lock.txt
 !backend/
 !backend/**
+!web/
+!web/**
 backend/**/__pycache__/
 backend/**/*.pyc

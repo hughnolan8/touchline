@@ -12,16 +12,16 @@ import time
 
 def run_once(mode):
     from backend.mobile.store import configure, initialize
-    from backend.mobile.engine import tick, training_tick
+    from backend.mobile.engine import tick
     configure()
     initialize()
-    result = training_tick() if mode == 'trainer' else tick(include_training=False)
+    result = tick()
     print(json.dumps({'event': 'engine_cycle', 'mode': mode, **result}), flush=True)
     return 1 if result.get('errors') else 0
 
 
 def supervise(mode, stop, interval=300, timeout=None, launch=subprocess.Popen, monotonic=time.monotonic):
-    timeout = timeout or (900 if mode == 'trainer' else 240)
+    timeout = timeout or 240
     while not stop.is_set():
         started = monotonic()
         process = launch([sys.executable, '-m', 'backend.runner', '--once', '--mode', mode], start_new_session=True)
@@ -47,7 +47,7 @@ def supervise(mode, stop, interval=300, timeout=None, launch=subprocess.Popen, m
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=('engine', 'trainer'), default=os.environ.get('ENGINE_MODE', 'engine'))
+    parser.add_argument('--mode', choices=('engine',), default='engine')
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(message)s')

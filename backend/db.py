@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from . import postgres
 
-COMPETITIONS = {'E0': 'Premier League', 'SP1': 'La Liga', 'D1': 'Bundesliga', 'I1': 'Serie A', 'F1': 'Ligue 1', 'CL': 'Champions League', 'EL': 'Europa League', 'ECL': 'Conference League'}
+COMPETITIONS = {'E0': 'Premier League'}
 DEFAULT_STRATEGY = dict(enabled=True, stake=10.0, min_edge=0.05, max_exposure=0.10, max_quote_age=15, window_start=60, window_end=15, version=1, stake_mode='kelly', kelly_fraction=0.25, max_bet_fraction=0.02, min_stake=1.0)
 
 def now(): return datetime.now(timezone.utc).isoformat()

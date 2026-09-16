@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from .db import COMPETITIONS, dump, now, rows, quarantine
 
-ZONES={'E0':'Europe/London','SP1':'Europe/Madrid','D1':'Europe/Berlin','I1':'Europe/Rome','F1':'Europe/Paris'}
+ZONES={'E0':'Europe/London'}
 BOOKS={'B365':'Bet365','BFD':'Betfair Sportsbook','BV':'BetVictor','PP':'Paddy Power','SKB':'Sky Bet'}
 # Deliberate aliases only: never fuzzy-join an unfamiliar team onto a priced fixture.
 ALIASES={'Manchester United':'Man United','Manchester City':'Man City','Newcastle United':'Newcastle','Nottingham Forest':'Nott\'m Forest','Tottenham Hotspur':'Tottenham','Brighton & Hove Albion':'Brighton','Wolverhampton Wanderers':'Wolves','West Ham United':'West Ham','Leicester City':'Leicester','Leeds United':'Leeds','Ipswich Town':'Ipswich','Coventry City':'Coventry','Hull City':'Hull','Sheffield United':'Sheffield United','West Bromwich Albion':'West Brom','Paris Saint-Germain':'Paris SG','Olympique Lyonnais':'Lyon','Olympique de Marseille':'Marseille','AS Monaco':'Monaco','Stade Rennais':'Rennes','Stade Brestois 29':'Brest','Stade de Reims':'Reims','RC Strasbourg Alsace':'Strasbourg','RC Lens':'Lens','LOSC Lille':'Lille','OGC Nice':'Nice','AJ Auxerre':'Auxerre','Le Havre':'Le Havre','Hellas Verona':'Verona','Internazionale Milano':'Inter','AC Milan':'Milan','AS Roma':'Roma','SSC Napoli':'Napoli','SS Lazio':'Lazio','ACF Fiorentina':'Fiorentina','US Lecce':'Lecce','Atalanta BC':'Atalanta','Parma Calcio 1913':'Parma','Como 1907':'Como','Udinese Calcio':'Udinese','Real Betis Balompié':'Betis','Atlético de Madrid':'Ath Madrid','Atletico Madrid':'Ath Madrid','Athletic Club':'Ath Bilbao','Athletic Club Bilbao':'Ath Bilbao','Deportivo Alavés':'Alaves','RCD Espanyol':'Espanol','RCD Mallorca':'Mallorca','CA Osasuna':'Osasuna','RC Celta de Vigo':'Celta','Celta Vigo':'Celta','Real Sociedad de Fútbol':'Sociedad','Real Sociedad':'Sociedad','Rayo Vallecano de Madrid':'Vallecano','Rayo Vallecano':'Vallecano','Bayern München':'Bayern Munich','Bayern Munich':'Bayern Munich','Borussia Dortmund':'Dortmund','Bayer 04 Leverkusen':'Leverkusen','Bayer Leverkusen':'Leverkusen','Borussia Mönchengladbach':'M\'gladbach','Eintracht Frankfurt':'Ein Frankfurt','VfB Stuttgart':'Stuttgart','VfL Wolfsburg':'Wolfsburg','SC Freiburg':'Freiburg','TSG 1899 Hoffenheim':'Hoffenheim','1899 Hoffenheim':'Hoffenheim','RB Leipzig':'RB Leipzig','1. FSV Mainz 05':'Mainz','FSV Mainz 05':'Mainz','1. FC Union Berlin':'Union Berlin','Union Berlin':'Union Berlin','1. FC Köln':'FC Koln','Hamburger SV':'Hamburg','SV Werder Bremen':'Werder Bremen','Werder Bremen':'Werder Bremen','FC St. Pauli':'St Pauli','FC Augsburg':'Augsburg','1. FC Heidenheim 1846':'Heidenheim'}
@@ -104,9 +104,6 @@ def football_csv(c,body,url,observed):
                     for s,label in [('H','home'),('D','draw'),('A','away')]:
                         price=number(r,prefix+s)
                         if price and price>1:add_quote(c,mid,'1x2',label,None,'',book,price,None,observed,'football-data',url)
-                for suffix,label in [('>2.5','over'),('<2.5','under')]:
-                    price=number(r,'B365'+suffix)
-                    if price and price>1:add_quote(c,mid,'goals',label,2.5,'','Bet365',price,None,observed,'football-data',url)
         except (ValueError,TypeError,KeyError) as e:quarantine(c,'football-data',str(e),r)
     return count
 
