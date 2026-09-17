@@ -9,14 +9,15 @@ from fastapi.responses import FileResponse,JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from backend.db import connect,rows,now,setting
-from backend.engine import account,matches,forecast,discrepancies,seconds
+from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds
 from .store import configure,initialize,acquire,release
 from .engine import refresh_all
 def serialize(b):
  s=json.loads(b['snapshot']);return {'id':b['id'],'home':b['home_name'],'away':b['away_name'],'competition':'Premier League','kickoff':b['kickoff'],'created_at':b['created_at'],'status':b['status'],'stake':b['stake'],'profit':b['profit'],'settled_at':b['settled_at'],'reason':b['reason'],'selection':s['selection'],'odds':s['odds'],'probability':s['probability'],'market_probability':s['market_probability'],'discrepancy':s['discrepancy'],'edge':s['edge'],'bookmaker':s['bookmaker']}
 def engine_status(c):
  last=setting(c,'last_engine_success')
- counts={'completed_matches':c.execute("SELECT COUNT(*) FROM matches WHERE competition='E0' AND status='finished'").fetchone()[0],'trained_models':c.execute("SELECT COUNT(*) FROM models WHERE competition='E0'").fetchone()[0],'upcoming_fixtures':c.execute("SELECT COUNT(*) FROM matches WHERE competition='E0' AND status='scheduled' AND kickoff>?",(now(),)).fetchone()[0],'verified_1x2_quotes':c.execute("SELECT COUNT(*) FROM quotes q JOIN matches m ON m.id=q.match_id WHERE m.competition='E0' AND q.market='1x2' AND q.verified=1").fetchone()[0]}
+ start,end=fixture_window()
+ counts={'completed_matches':c.execute("SELECT COUNT(*) FROM matches WHERE competition='E0' AND status='finished'").fetchone()[0],'trained_models':c.execute("SELECT COUNT(*) FROM models WHERE competition='E0'").fetchone()[0],'upcoming_fixtures':c.execute("SELECT COUNT(*) FROM matches WHERE competition='E0' AND status='scheduled' AND kickoff>? AND kickoff<=?",(start,end)).fetchone()[0],'verified_1x2_quotes':c.execute("SELECT COUNT(*) FROM quotes q JOIN matches m ON m.id=q.match_id WHERE m.competition='E0' AND m.kickoff>? AND m.kickoff<=? AND q.market='1x2' AND q.verified=1",(start,end)).fetchone()[0]}
  return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':bool(os.environ.get('MOBILE_ODDS_API_KEY')),'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'league':'Premier League','data':counts}
 def recent_form(c,team_id):
  games=rows(c,"SELECT home,away,stats FROM matches WHERE competition='E0' AND status='finished' AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5",(team_id,team_id));form=[]

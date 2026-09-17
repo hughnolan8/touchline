@@ -1,7 +1,7 @@
 from datetime import datetime,timedelta,timezone
 import json
 from backend.db import connect,now,dump
-from backend.engine import devig,account,place_required_bet,settle
+from backend.engine import devig,account,matches,place_required_bet,settle
 from backend.engine import forecast,train
 from backend.providers import ingest_match,add_quote
 
@@ -40,3 +40,10 @@ def test_forecast_uses_canonical_team_ids():
    c.execute('INSERT INTO matches(id,competition,home,away,kickoff,time_confirmed,status,stats,source,source_id,observed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(f'h{i}','E0',m['home'],m['away'],stamp(-1000-i),1,'finished',dump({'hg':1+i%3,'ag':i%2}),'test',f'h{i}',now()))
   train(c)
   assert forecast(c,m) is not None
+
+def test_matches_only_returns_the_next_seven_days():
+ at='2026-09-17T12:00:00+00:00'
+ with connect() as c:
+  near=ingest_match(c,'test','near','E0','Arsenal','Chelsea','2026-09-24T12:00:00+00:00',True,'scheduled',{})
+  ingest_match(c,'test','later','E0','Liverpool','Everton','2026-09-24T12:01:00+00:00',True,'scheduled',{})
+  assert [m['id'] for m in matches(c,at=at)]==[near]

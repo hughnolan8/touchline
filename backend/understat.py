@@ -1,5 +1,5 @@
 """Premier League fixture and result imports from Understat via understatapi."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from understatapi import UnderstatClient
 
@@ -44,6 +44,7 @@ def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observ
     """
     imported = 0
     observed = observed or now()
+    fixture_cutoff = (datetime.fromisoformat(observed) + timedelta(days=7)).isoformat()
     with client_factory() as client:
         endpoint = client.league(league=LEAGUE)
         for season in seasons:
@@ -52,6 +53,10 @@ def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observ
                     source_id, home, away, kickoff, confirmed, status, stats = _match_fields(match)
                     if status == 'finished' and kickoff > observed:
                         raise ValueError('Result appears before kickoff')
+                    # Results are historical training data; scheduled fixtures are
+                    # deliberately kept to the same seven-day horizon as odds.
+                    if status == 'scheduled' and not observed < kickoff <= fixture_cutoff:
+                        continue
                     match_id = ingest_match(
                         connection, SOURCE, source_id, 'E0', home, away, kickoff, confirmed,
                         status, stats, observed,

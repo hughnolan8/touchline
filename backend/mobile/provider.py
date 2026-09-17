@@ -6,10 +6,12 @@ from backend.odds_api import OddsApiError,SPORT,parse_events
 class MobileOdds:
  def __init__(self):self.client=httpx.Client(timeout=25)
  def close(self):self.client.close()
- def refresh(self,from_time=None,to_time=None):
+ def refresh(self,at=None,from_time=None,to_time=None):
   key=os.environ.get('MOBILE_ODDS_API_KEY')
   if not key:raise OddsApiError('MOBILE_ODDS_API_KEY is not configured')
-  at=datetime.fromisoformat(now());params={'apiKey':key,'regions':'uk','markets':'h2h','oddsFormat':'decimal','dateFormat':'iso'}
+  at=datetime.fromisoformat(at or now());params={'apiKey':key,'regions':'uk','markets':'h2h','oddsFormat':'decimal','dateFormat':'iso'}
+  # Never consume quota on markets that cannot appear on the dashboard.
+  from_time=from_time or at.isoformat();to_time=to_time or (at+timedelta(days=7)).isoformat()
   if from_time:params['commenceTimeFrom']=from_time
   if to_time:params['commenceTimeTo']=to_time
   try:r=self.client.get(f'https://api.the-odds-api.com/v4/sports/{SPORT}/odds',params=params);r.raise_for_status();events=r.json()

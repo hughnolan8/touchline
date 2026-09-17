@@ -9,7 +9,9 @@ class FakeLeague:
             {'id': '1', 'isResult': True, 'h': {'title': 'Arsenal'}, 'a': {'title': 'Chelsea'},
              'goals': {'h': '2', 'a': '1'}, 'datetime': '2024-08-16 19:00:00'},
             {'id': '2', 'isResult': False, 'h': {'title': 'Liverpool'}, 'a': {'title': 'Everton'},
-             'goals': {'h': None, 'a': None}, 'datetime': '2024-08-17 14:00:00'},
+             'goals': {'h': None, 'a': None}, 'datetime': '2024-08-20 14:00:00'},
+            {'id': '3', 'isResult': False, 'h': {'title': 'Brighton'}, 'a': {'title': 'Arsenal'},
+             'goals': {'h': None, 'a': None}, 'datetime': '2024-08-26 14:00:00'},
         ]
 
 
@@ -41,7 +43,7 @@ def test_sync_epl_seasons_imports_results_and_scheduled_fixtures():
         aliases = connection.execute('SELECT source,name FROM aliases ORDER BY name').fetchall()
     assert [dict(match) for match in matches] == [
         {'source': 'understat', 'source_id': '1', 'status': 'finished', 'stats': '{"hg":2,"ag":1}', 'kickoff': '2024-08-16T19:00:00+00:00'},
-        {'source': 'understat', 'source_id': '2', 'status': 'scheduled', 'stats': '{}', 'kickoff': '2024-08-17T14:00:00+00:00'},
+        {'source': 'understat', 'source_id': '2', 'status': 'scheduled', 'stats': '{}', 'kickoff': '2024-08-20T14:00:00+00:00'},
     ]
     assert {tuple(alias) for alias in aliases} == {('understat', 'Arsenal'), ('understat', 'Chelsea'), ('understat', 'Everton'), ('understat', 'Liverpool')}
 

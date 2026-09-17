@@ -1,6 +1,6 @@
 """Premier League forecasts, discrepancies, and paper ledger."""
 import json,math,os,sqlite3
-from datetime import datetime
+from datetime import datetime,timedelta
 from zoneinfo import ZoneInfo
 from .db import connect,rows,now,dump,setting,set_setting
 from .models import fit_dixon_coles,predict_1x2
@@ -24,9 +24,14 @@ def train(c,at=None):
  return c.execute('INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES(?,?,?,?,?,?)',(LEAGUE,at,at,len(r),dump(p),dump({'method':'time-decayed Dixon-Coles'}))).lastrowid
 def current_model(c):
  x=c.execute("SELECT * FROM models WHERE competition='E0' ORDER BY id DESC LIMIT 1").fetchone();return dict(x) if x else None
-def matches(c,upcoming=True):
+FIXTURE_WINDOW=timedelta(days=7)
+def fixture_window(at=None):
+ at=at or now();return at,(datetime.fromisoformat(at)+FIXTURE_WINDOW).isoformat()
+def matches(c,upcoming=True,at=None):
  q="SELECT m.*,h.name home_name,a.name away_name FROM matches m JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away WHERE m.competition='E0'"
- return rows(c,q+(" AND m.status='scheduled' AND m.kickoff>?" if upcoming else '')+' ORDER BY m.kickoff',(now(),) if upcoming else ())
+ if not upcoming:return rows(c,q+' ORDER BY m.kickoff')
+ start,end=fixture_window(at)
+ return rows(c,q+" AND m.status='scheduled' AND m.kickoff>? AND m.kickoff<=? ORDER BY m.kickoff",(start,end))
 def forecast(c,m,at=None):
  at=at or now();model=current_model(c)
  if not model:return None

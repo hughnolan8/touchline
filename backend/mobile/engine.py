@@ -25,7 +25,7 @@ def refresh_all(at=None):
  with connect() as c:
   train(c,at)
  odds=MobileOdds()
- try:count=odds.refresh()
+ try:count=odds.refresh(at)
  finally:odds.close()
  with connect() as c:
   placed=[]
@@ -48,7 +48,7 @@ def tick(at=None):
    due=[m for m in matches(c) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'refreshed:'+m['id']) is None]
   if due:
    odds=MobileOdds()
-   try:odds.refresh()
+   try:odds.refresh(at)
    finally:odds.close()
    with connect() as c:
     train(c,at)
