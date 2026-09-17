@@ -4,6 +4,7 @@ WORKDIR /app
 COPY requirements.lock.txt ./
 RUN pip install --no-cache-dir -r requirements.lock.txt
 COPY backend ./backend
+COPY scripts/reset-railway-data.py ./scripts/reset-railway-data.py
 COPY web ./web
 RUN useradd --create-home --uid 10001 touchline
 USER touchline

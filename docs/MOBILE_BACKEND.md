@@ -2,4 +2,4 @@
 
 Deploy only `api` and `engine`; remove the former `trainer` service and its variables/jobs. Both services need `DATABASE_URL` and `MOBILE_ODDS_API_KEY`. The dashboard is public and no longer uses `MOBILE_OWNER_TOKEN`.
 
-Before deployment, reset the existing Railway PostgreSQL data so the Premier League £1,000 ledger starts cleanly. The first worker run imports four Premier League seasons from Football-Data and fits Dixon–Coles. Thereafter it refreshes complete results only for settlement and uses The Odds API for 1X2 prices.
+For the Understat cutover, deploy the updated engine first, then run `railway ssh --service engine -- python scripts/reset-railway-data.py --confirm` to reset the existing Railway PostgreSQL football, model, prediction, and paper-ledger data. This runs inside Railway's private network; `railway run` executes locally and cannot reach the private PostgreSQL hostname. The first worker run imports the active Premier League season and the three preceding seasons from Understat, then fits Dixon–Coles. Thereafter it refreshes the active Understat season for settlement and uses The Odds API only for verified 1X2 prices.

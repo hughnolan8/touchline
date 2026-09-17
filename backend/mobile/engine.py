@@ -1,31 +1,23 @@
 """One five-minute Premier League worker; no queue or trainer service."""
-from datetime import datetime,timedelta
 import logging
 from backend.db import connect,now,setting,set_setting
 from backend.engine import matches,train,forecast,place_required_bet,settle,seconds
-from backend.providers import PublicFiles,football_csv
+from backend.understat import season_start,sync_epl_seasons
 from .provider import MobileOdds
 from .store import acquire,release
-def season_url(at,year=None):
- dt=datetime.fromisoformat(at);year=year if year is not None else (dt.year if dt.month>=7 else dt.year-1);return f'https://www.football-data.co.uk/mmz4281/{year%100:02}{(year+1)%100:02}/E0.csv'
 def import_scores(at=None):
- at=at or now();provider=PublicFiles()
- try:
-  with connect() as c:
-   count=provider.fetch(c,season_url(at),'football-data',football_csv)
-  logging.info('score_refresh records=%s',count)
-  return count
- finally:provider.client.close()
+ at=at or now()
+ with connect() as c:
+  count=sync_epl_seasons(c,[season_start(at)])
+ logging.info('understat_refresh records=%s',count)
+ return count
 def bootstrap(at=None):
  at=at or now()
  with connect() as c:
   if setting(c,'bootstrap_complete'):return False
- year=datetime.fromisoformat(at).year if datetime.fromisoformat(at).month>=7 else datetime.fromisoformat(at).year-1
- provider=PublicFiles()
- try:
-  with connect() as c:
-   for y in range(year-3,year+1):provider.fetch(c,season_url(at,y),'football-data',football_csv)
- finally:provider.client.close()
+ year=season_start(at)
+ with connect() as c:
+  sync_epl_seasons(c,range(year-3,year+1))
  with connect() as c:set_setting(c,'bootstrap_complete',at)
  return True
 def refresh_all(at=None):

@@ -1,17 +1,10 @@
-"""Public-file collectors and strict normalisation. No private endpoints or challenge bypasses."""
-import csv
+"""Fixture identity and odds normalisation."""
 import hashlib
-import io
 import json
 import re
 import unicodedata
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
-import httpx
 from .db import COMPETITIONS, dump, now, rows, quarantine
 
-ZONES={'E0':'Europe/London'}
-BOOKS={'B365':'Bet365','BFD':'Betfair Sportsbook','BV':'BetVictor','PP':'Paddy Power','SKB':'Sky Bet'}
 # Deliberate aliases only: never fuzzy-join an unfamiliar team onto a priced fixture.
 ALIASES={'Manchester United':'Man United','Manchester City':'Man City','Newcastle United':'Newcastle','Nottingham Forest':'Nott\'m Forest','Tottenham Hotspur':'Tottenham','Brighton & Hove Albion':'Brighton','Wolverhampton Wanderers':'Wolves','West Ham United':'West Ham','Leicester City':'Leicester','Leeds United':'Leeds','Ipswich Town':'Ipswich','Coventry City':'Coventry','Hull City':'Hull','Sheffield United':'Sheffield United','West Bromwich Albion':'West Brom','Paris Saint-Germain':'Paris SG','Olympique Lyonnais':'Lyon','Olympique de Marseille':'Marseille','AS Monaco':'Monaco','Stade Rennais':'Rennes','Stade Brestois 29':'Brest','Stade de Reims':'Reims','RC Strasbourg Alsace':'Strasbourg','RC Lens':'Lens','LOSC Lille':'Lille','OGC Nice':'Nice','AJ Auxerre':'Auxerre','Le Havre':'Le Havre','Hellas Verona':'Verona','Internazionale Milano':'Inter','AC Milan':'Milan','AS Roma':'Roma','SSC Napoli':'Napoli','SS Lazio':'Lazio','ACF Fiorentina':'Fiorentina','US Lecce':'Lecce','Atalanta BC':'Atalanta','Parma Calcio 1913':'Parma','Como 1907':'Como','Udinese Calcio':'Udinese','Real Betis Balompié':'Betis','Atlético de Madrid':'Ath Madrid','Atletico Madrid':'Ath Madrid','Athletic Club':'Ath Bilbao','Athletic Club Bilbao':'Ath Bilbao','Deportivo Alavés':'Alaves','RCD Espanyol':'Espanol','RCD Mallorca':'Mallorca','CA Osasuna':'Osasuna','RC Celta de Vigo':'Celta','Celta Vigo':'Celta','Real Sociedad de Fútbol':'Sociedad','Real Sociedad':'Sociedad','Rayo Vallecano de Madrid':'Vallecano','Rayo Vallecano':'Vallecano','Bayern München':'Bayern Munich','Bayern Munich':'Bayern Munich','Borussia Dortmund':'Dortmund','Bayer 04 Leverkusen':'Leverkusen','Bayer Leverkusen':'Leverkusen','Borussia Mönchengladbach':'M\'gladbach','Eintracht Frankfurt':'Ein Frankfurt','VfB Stuttgart':'Stuttgart','VfL Wolfsburg':'Wolfsburg','SC Freiburg':'Freiburg','TSG 1899 Hoffenheim':'Hoffenheim','1899 Hoffenheim':'Hoffenheim','RB Leipzig':'RB Leipzig','1. FSV Mainz 05':'Mainz','FSV Mainz 05':'Mainz','1. FC Union Berlin':'Union Berlin','Union Berlin':'Union Berlin','1. FC Köln':'FC Koln','Hamburger SV':'Hamburg','SV Werder Bremen':'Werder Bremen','Werder Bremen':'Werder Bremen','FC St. Pauli':'St Pauli','FC Augsburg':'Augsburg','1. FC Heidenheim 1846':'Heidenheim'}
 
@@ -70,64 +63,3 @@ def add_quote(c,match_id,market,selection,line,player,bookmaker,odds,quoted_at,c
     data=[match_id,market,selection,line,player,rules,bookmaker,odds,quoted_at,source,url,bool(verified)]
     fp=hashlib.sha256(dump(data).encode()).hexdigest()
     c.execute('INSERT OR IGNORE INTO quotes(match_id,market,selection,line,player,rules,bookmaker,odds,quoted_at,collected_at,source,url,verified,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(match_id,market,selection,line,player,rules,bookmaker,odds,quoted_at,collected_at,source,url,int(verified),fp))
-
-def number(row,key):
-    value=row.get(key)
-    if value is None or value.strip()=='':return None
-    value=float(value)
-    if not 0<=value<10000:raise ValueError(f'Invalid {key}')
-    return value
-
-def football_csv(c,body,url,observed):
-    reader=csv.DictReader(io.StringIO(body.lstrip('\ufeff')))
-    if not {'Div','Date','HomeTeam','AwayTeam'}.issubset(reader.fieldnames or []):raise ValueError('CSV schema changed: required fixture headers missing')
-    count=0
-    for r in reader:
-        if r.get('Div') not in ZONES:continue
-        try:
-            if None in r:raise ValueError('Malformed CSV row: extra columns')
-            d=datetime.strptime(r['Date'],'%d/%m/%Y' if len(r['Date'])==10 else '%d/%m/%y')
-            confirmed=bool(r.get('Time'));tm=r.get('Time') or '12:00'
-            hour,minute=map(int,tm.split(':'));kickoff=d.replace(hour=hour,minute=minute,tzinfo=ZoneInfo('Europe/London')).astimezone(timezone.utc).isoformat()
-            stats={k:number(r,v) for k,v in {'hg':'FTHG','ag':'FTAG','hc':'HC','ac':'AC','hy':'HY','ay':'AY','hr':'HR','ar':'AR','hs':'HS','as':'AS','hst':'HST','ast':'AST','hf':'HF','af':'AF'}.items()}
-            if any(v is not None and not v.is_integer() for v in stats.values()):raise ValueError('Count statistics must be integers')
-            closing=[number(r,'B365C'+s) for s in ('H','D','A')]
-            if all(x is not None and x>1 for x in closing):stats['closing_1x2']=closing
-            status='finished' if stats['hg'] is not None and stats['ag'] is not None else 'scheduled'
-            if status=='finished' and kickoff>observed:raise ValueError('Result appears before kickoff')
-            mid=ingest_match(c,'football-data',f"{r['Div']}:{r['Date']}:{r['HomeTeam']}:{r['AwayTeam']}",r['Div'],r['HomeTeam'],r['AwayTeam'],kickoff,confirmed,status,stats,observed)
-            if not mid:continue
-            count+=1
-            # Batch publication has no per-quote timestamp: always indicative, never fresh.
-            if status=='scheduled':
-                for prefix,book in BOOKS.items():
-                    for s,label in [('H','home'),('D','draw'),('A','away')]:
-                        price=number(r,prefix+s)
-                        if price and price>1:add_quote(c,mid,'1x2',label,None,'',book,price,None,observed,'football-data',url)
-        except (ValueError,TypeError,KeyError) as e:quarantine(c,'football-data',str(e),r)
-    return count
-
-
-
-class PublicFiles:
-    id='public-files'
-    def __init__(self): self.client=httpx.Client(timeout=30,follow_redirects=True,headers={'User-Agent':'TouchlineResearch/1.0 (personal local analysis)'})
-    def fetch(self,c,url,source,parser):
-        try:
-            # PostgreSQL marks the whole transaction failed after a query
-            # error.  Isolate each source so one malformed document cannot
-            # prevent the remaining sources or the source-health update.
-            c.execute('SAVEPOINT source_fetch')
-            response=self.client.get(url);response.raise_for_status();body=response.content.decode('utf-8-sig',errors='replace');observed=now()
-            if len(body)>8_000_000:raise ValueError('Source document exceeds size limit')
-            digest=hashlib.sha256(body.encode()).hexdigest()
-            count=parser(c,body,url,observed)
-            c.execute('INSERT OR IGNORE INTO snapshots(source,url,observed_at,content_hash,body) VALUES(?,?,?,?,?)',(source,url,observed,digest,body))
-            c.execute('INSERT INTO sources VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,records=excluded.records,message=excluded.message',(url,'ok',observed,count,'Public dataset collected; odds timestamps may be unavailable'))
-            c.execute('RELEASE SAVEPOINT source_fetch')
-            return count
-        except Exception as e:
-            c.execute('ROLLBACK TO SAVEPOINT source_fetch')
-            c.execute('RELEASE SAVEPOINT source_fetch')
-            c.execute('INSERT INTO sources VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,message=excluded.message',(url,'error',now(),0,str(e)[:350]))
-            return 0
