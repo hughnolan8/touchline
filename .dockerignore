@@ -3,6 +3,8 @@
 !requirements.lock.txt
 !backend/
 !backend/**
+!scripts/
+!scripts/reset-railway-data.py
 !web/
 !web/**
 backend/**/__pycache__/
