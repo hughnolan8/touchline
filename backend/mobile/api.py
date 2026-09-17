@@ -62,7 +62,7 @@ def create_app(setup=True):
    answer=[]
    for m in matches(c):
     p=forecast(c,m)
-    shadow=c.execute("SELECT payload,features FROM predictions WHERE match_id=? AND features LIKE '%confirmed-xi%' ORDER BY id DESC LIMIT 1",(m['id'],)).fetchone()
+    shadow=c.execute("SELECT payload,features FROM predictions WHERE match_id=? AND features LIKE ? ORDER BY id DESC LIMIT 1",(m['id'],'%confirmed-xi%')).fetchone()
     xi=None
     if shadow:
      player=json.loads(shadow['payload']);features=json.loads(shadow['features'])['lineups'];xi={'status':'confirmed','captured_at':player['lineup_captured_at'],'home':{'adjustment':player['lineup_adjustment']['home'],'contributors':features['home']['starters']},'away':{'adjustment':player['lineup_adjustment']['away'],'contributors':features['away']['starters']}}

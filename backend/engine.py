@@ -33,9 +33,9 @@ def train_player(c,at=None):
  model=fit_dixon_coles(records,at,features)
  return c.execute('INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES(?,?,?,?,?,?)',(LEAGUE,at,at,len(records),dump(model),dump({'method':'Dixon-Coles + confirmed XI','coverage':len(records)}))).lastrowid
 def current_model(c):
- x=c.execute("SELECT * FROM models WHERE competition='E0' AND metrics NOT LIKE '%confirmed XI%' ORDER BY id DESC LIMIT 1").fetchone();return dict(x) if x else None
+ x=c.execute("SELECT * FROM models WHERE competition='E0' AND metrics NOT LIKE ? ORDER BY id DESC LIMIT 1",('%confirmed XI%',)).fetchone();return dict(x) if x else None
 def current_player_model(c):
- x=c.execute("SELECT * FROM models WHERE competition='E0' AND metrics LIKE '%confirmed XI%' ORDER BY id DESC LIMIT 1").fetchone();return dict(x) if x else None
+ x=c.execute("SELECT * FROM models WHERE competition='E0' AND metrics LIKE ? ORDER BY id DESC LIMIT 1",('%confirmed XI%',)).fetchone();return dict(x) if x else None
 FIXTURE_WINDOW=timedelta(days=7)
 def fixture_window(at=None):
  at=at or now();return at,(datetime.fromisoformat(at)+FIXTURE_WINDOW).isoformat()
