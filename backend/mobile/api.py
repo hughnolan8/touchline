@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.db import connect,rows,now,setting
 from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds
 from .store import configure,initialize,acquire,release
-from .engine import refresh_all
+from .engine import refresh_all,refresh_missing_odds
 def serialize(b):
  s=json.loads(b['snapshot']);return {'id':b['id'],'home':b['home_name'],'away':b['away_name'],'competition':'Premier League','kickoff':b['kickoff'],'created_at':b['created_at'],'status':b['status'],'stake':b['stake'],'profit':b['profit'],'settled_at':b['settled_at'],'reason':b['reason'],'selection':s['selection'],'odds':s['odds'],'probability':s['probability'],'market_probability':s['market_probability'],'discrepancy':s['discrepancy'],'edge':s['edge'],'bookmaker':s['bookmaker']}
 def engine_status(c):
@@ -78,4 +78,10 @@ def create_app(setup=True):
   if not token:raise HTTPException(409,'A refresh is already running')
   try:return refresh_all()
   finally:release('manual-refresh',token)
+ @app.post('/api/v1/refresh-missing-odds')
+ def refresh_missing_odds_endpoint():
+  token=acquire('missing-odds-refresh',seconds=300)
+  if not token:raise HTTPException(409,'An odds refresh is already running')
+  try:return refresh_missing_odds()
+  finally:release('missing-odds-refresh',token)
  return app

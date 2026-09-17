@@ -1,7 +1,7 @@
 """One five-minute Premier League worker; no queue or trainer service."""
 import logging
 from backend.db import connect,now,setting,set_setting
-from backend.engine import matches,train,forecast,place_required_bet,settle,seconds
+from backend.engine import best_market,matches,train,forecast,place_required_bet,settle,seconds
 from backend.understat import season_start,sync_epl_seasons
 from .provider import MobileOdds
 from .store import acquire,release
@@ -29,13 +29,25 @@ def refresh_all(at=None):
  finally:odds.close()
  with connect() as c:
   placed=[]
-  for m in matches(c):
+  for m in matches(c,at=at):
    p=forecast(c,m,at)
    if p:placed.append(place_required_bet(c,m,p,at))
   set_setting(c,'last_manual_refresh',at)
  result={'fixtures':count,'decisions':placed,'settled':settle(at)}
  logging.info('manual_refresh fixtures=%s decisions=%s settled=%s',count,len(placed),result['settled'])
  return result
+def refresh_missing_odds(at=None):
+ at=at or now()
+ with connect() as c:
+  missing=[m['id'] for m in matches(c,at=at) if not best_market(c,m['id'])]
+ if not missing:return {'requested':0,'fixtures':0,'still_missing':0}
+ odds=MobileOdds()
+ try:count=odds.refresh(at)
+ finally:odds.close()
+ with connect() as c:
+  remaining=sum(not bool(best_market(c,match_id)) for match_id in missing)
+  set_setting(c,'last_missing_odds_refresh',at)
+ return {'requested':len(missing),'fixtures':count,'still_missing':remaining}
 def tick(at=None):
  at=at or now();token=acquire('engine',seconds=290)
  if not token:return {'ok':True,'skipped':True}
@@ -45,7 +57,7 @@ def tick(at=None):
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
   if open_bets:import_scores(at)
   with connect() as c:
-   due=[m for m in matches(c) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'refreshed:'+m['id']) is None]
+   due=[m for m in matches(c,at=at) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'refreshed:'+m['id']) is None]
   if due:
    odds=MobileOdds()
    try:odds.refresh(at)
