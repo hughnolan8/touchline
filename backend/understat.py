@@ -5,6 +5,7 @@ from understatapi import UnderstatClient
 
 from .db import now, quarantine
 from .providers import ingest_match
+from .playerstats import save_roster
 
 
 SOURCE = 'understat'
@@ -65,6 +66,14 @@ def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observ
                     quarantine(connection, SOURCE, str(error), match)
                     continue
                 if match_id:
+                    # Rosters are only requested for finalised matches and only
+                    # until a successful player-stat import exists.  They label
+                    # historical XIs; never infer an upcoming lineup from them.
+                    if status == 'finished' and not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
+                        try:
+                            save_roster(connection, match_id, client.match(match=str(source_id)).get_roster_data(timeout=REQUEST_TIMEOUT))
+                        except Exception as error:  # Provider outages must not block scores.
+                            quarantine(connection, SOURCE, f'Roster import failed: {error}', {'match_id': source_id})
                     imported += 1
     return imported
 

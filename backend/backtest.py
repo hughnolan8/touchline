@@ -10,6 +10,7 @@ from datetime import datetime
 
 from .engine import history
 from .models import fit_dixon_coles, predict_1x2
+from .playerstats import historical_lineups
 
 
 OUTCOMES = ('home', 'draw', 'away')
@@ -81,6 +82,30 @@ def walk_forward(connection, minimum_samples=40, retrain_days=1):
             'log_loss': -math.log(max(probabilities[actual], 1e-15)),
             'brier': sum((probabilities[key] - (key == actual)) ** 2 for key in OUTCOMES) / len(OUTCOMES),
         })
+    return evaluations
+
+
+def walk_forward_player(connection, minimum_samples=40, retrain_days=1):
+    """Evaluate actual historical XIs with only pre-kickoff player data."""
+    fixtures = completed_matches(connection); evaluations = []; models = {}
+    for fixture in fixtures:
+        features = historical_lineups(connection, fixture['id'], fixture['kickoff'])
+        if not features: continue
+        interval = datetime.fromisoformat(fixture['kickoff']).date().toordinal() // retrain_days
+        model = models.get(interval)
+        if model is None:
+            prior = history(connection, fixture['kickoff']); train_features = {}
+            for item in prior:
+                value = historical_lineups(connection, item['id'], item['kickoff'])
+                if value: train_features[item['id']] = value
+            prior = [item for item in prior if item['id'] in train_features]
+            model = fit_dixon_coles(prior, fixture['kickoff'], train_features) if len(prior) >= minimum_samples else False
+            models[interval] = model
+        if model is False: continue
+        prediction = predict_1x2(model, fixture['home'], fixture['away'], features)
+        if not prediction: continue
+        probabilities = prediction['probabilities']; actual = outcome(fixture['stats']); pick = max(OUTCOMES, key=probabilities.__getitem__)
+        evaluations.append({'id': fixture['id'], 'kickoff': fixture['kickoff'], 'actual': actual, 'pick': pick, 'correct': pick == actual, 'probabilities': probabilities, 'log_loss': -math.log(max(probabilities[actual], 1e-15)), 'brier': sum((probabilities[key] - (key == actual)) ** 2 for key in OUTCOMES) / len(OUTCOMES)})
     return evaluations
 
 

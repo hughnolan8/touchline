@@ -9,7 +9,7 @@ from pathlib import Path
 # Support the documented `python scripts/backtest.py` invocation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend.backtest import summary, walk_forward
+from backend.backtest import summary, walk_forward, walk_forward_player
 from backend.db import connect, init
 from backend.understat import import_epl_results
 
@@ -31,6 +31,7 @@ def main():
         imported = 0 if args.skip_import else import_epl_results(connection, range(args.start_season, args.end_season + 1))
     with connect() as connection:
         report = summary(walk_forward(connection, retrain_days=args.retrain_days))
+        report['confirmed_xi'] = summary(walk_forward_player(connection, retrain_days=args.retrain_days))
     report['imported_results'] = imported
     report['retrain_days'] = args.retrain_days
     print(json.dumps(report, indent=2))

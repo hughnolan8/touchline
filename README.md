@@ -36,6 +36,14 @@ The repository remote is GitHub. In Railway, open the project and connect each d
 
 The engine bootstraps the active Premier League season and the prior three seasons from Understat. It refreshes the active season on manual refresh and while settling overdue bets; The Odds API remains the only source of 1X2 prices.
 
+## Confirmed-XI shadow model
+
+Set `API_FOOTBALL_KEY` on the engine service to enable confirmed-lineup polling.
+Understat supplies completed-match player xG/xA and historical rosters; API-Football
+supplies the upcoming confirmed XI. Touchline keeps these player-adjusted forecasts
+in shadow mode: they are shown in prediction details but do not affect paper stakes.
+The player backtest is reported as `confirmed_xi` alongside the score-only baseline.
+
 For the one-time datasource cutover, first deploy the updated engine so the reset command is present in its image. Then reset the Railway football, model, prediction, and paper-ledger data from inside that engine service:
 
 ```sh

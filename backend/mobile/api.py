@@ -62,7 +62,11 @@ def create_app(setup=True):
    answer=[]
    for m in matches(c):
     p=forecast(c,m)
-    if p:answer.append({'id':m['id'],'home':m['home_name'],'away':m['away_name'],'competition':'Premier League','kickoff':m['kickoff'],'model':'Dixon-Coles','selections':discrepancies(c,m,p),'stats':{'home':{'xg':p['home_goals'],'form':recent_form(c,m['home'])},'away':{'xg':p['away_goals'],'form':recent_form(c,m['away'])}}})
+    shadow=c.execute("SELECT payload,features FROM predictions WHERE match_id=? AND features LIKE '%confirmed-xi%' ORDER BY id DESC LIMIT 1",(m['id'],)).fetchone()
+    xi=None
+    if shadow:
+     player=json.loads(shadow['payload']);features=json.loads(shadow['features'])['lineups'];xi={'status':'confirmed','captured_at':player['lineup_captured_at'],'home':{'adjustment':player['lineup_adjustment']['home'],'contributors':features['home']['starters']},'away':{'adjustment':player['lineup_adjustment']['away'],'contributors':features['away']['starters']}}
+    if p:answer.append({'id':m['id'],'home':m['home_name'],'away':m['away_name'],'competition':'Premier League','kickoff':m['kickoff'],'model':'Dixon-Coles','selections':discrepancies(c,m,p),'stats':{'home':{'xg':p['home_goals'],'form':recent_form(c,m['home'])},'away':{'xg':p['away_goals'],'form':recent_form(c,m['away'])},'xi':xi or {'status':'awaiting'}}})
    return answer
  @app.get('/api/v1/bets')
  def bets():

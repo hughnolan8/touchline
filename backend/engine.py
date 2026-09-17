@@ -4,6 +4,7 @@ from datetime import datetime,timedelta
 from zoneinfo import ZoneInfo
 from .db import connect,rows,now,dump,setting,set_setting
 from .models import fit_dixon_coles,predict_1x2
+from .playerstats import historical_lineups, lineup_features
 LEAGUE='E0';STARTING_BANKROLL=1000.;KELLY_FRACTION=.25;MAX_BET_FRACTION=.02;MIN_FALLBACK_STAKE=1.
 def seconds(a,b):return (datetime.fromisoformat(a)-datetime.fromisoformat(b)).total_seconds()
 def is_bet_day(kickoff,at):
@@ -22,8 +23,19 @@ def train(c,at=None):
  p=fit_dixon_coles(r,at)
  if not p:return None
  return c.execute('INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES(?,?,?,?,?,?)',(LEAGUE,at,at,len(r),dump(p),dump({'method':'time-decayed Dixon-Coles'}))).lastrowid
+def train_player(c,at=None):
+ at=at or now(); records=history(c,at); features={}
+ for record in records:
+  value=historical_lineups(c,record['id'],record['kickoff'])
+  if value:features[record['id']]=value
+ records=[r for r in records if r['id'] in features]
+ if len(records)<40:return None
+ model=fit_dixon_coles(records,at,features)
+ return c.execute('INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES(?,?,?,?,?,?)',(LEAGUE,at,at,len(records),dump(model),dump({'method':'Dixon-Coles + confirmed XI','coverage':len(records)}))).lastrowid
 def current_model(c):
- x=c.execute("SELECT * FROM models WHERE competition='E0' ORDER BY id DESC LIMIT 1").fetchone();return dict(x) if x else None
+ x=c.execute("SELECT * FROM models WHERE competition='E0' AND metrics NOT LIKE '%confirmed XI%' ORDER BY id DESC LIMIT 1").fetchone();return dict(x) if x else None
+def current_player_model(c):
+ x=c.execute("SELECT * FROM models WHERE competition='E0' AND metrics LIKE '%confirmed XI%' ORDER BY id DESC LIMIT 1").fetchone();return dict(x) if x else None
 FIXTURE_WINDOW=timedelta(days=7)
 def fixture_window(at=None):
  at=at or now();return at,(datetime.fromisoformat(at)+FIXTURE_WINDOW).isoformat()
@@ -39,6 +51,16 @@ def forecast(c,m,at=None):
  p=predict_1x2(json.loads(model['payload']),m['home'],m['away'])
  if not p:return None
  p={**p,'model':'Dixon-Coles'};c.execute('INSERT OR IGNORE INTO predictions(match_id,model_id,created_at,kickoff,payload,features) VALUES(?,?,?,?,?,?)',(m['id'],model['id'],at,m['kickoff'],dump(p),dump({})));return p
+def forecast_player(c,m,lineups,captured_at,at=None):
+ at=at or now(); model=current_player_model(c)
+ if not model:return None
+ features={side:lineup_features(c,m['id'],side,lineups[side],m['kickoff']) for side in ('home','away')}
+ if not all(features.values()):return None
+ prediction=predict_1x2(json.loads(model['payload']),m['home'],m['away'],features)
+ if not prediction:return None
+ prediction.update({'model':'Dixon-Coles + confirmed XI','lineup_captured_at':captured_at})
+ c.execute('INSERT OR IGNORE INTO predictions(match_id,model_id,created_at,kickoff,payload,features) VALUES(?,?,?,?,?,?)',(m['id'],model['id'],at,m['kickoff'],dump(prediction),dump({'variant':'confirmed-xi','captured_at':captured_at,'lineups':features})))
+ return prediction
 def devig(qs):
  by={q['selection']:q for q in qs}
  if set(by)!={'home','draw','away'}:return {}

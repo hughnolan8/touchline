@@ -100,6 +100,10 @@ CREATE TABLE IF NOT EXISTS matches(id TEXT PRIMARY KEY,competition TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS match_aliases(source TEXT,source_id TEXT,match_id TEXT REFERENCES matches(id),PRIMARY KEY(source,source_id));
 CREATE TABLE IF NOT EXISTS snapshots(id BIGSERIAL PRIMARY KEY,source TEXT,url TEXT,observed_at TEXT,content_hash TEXT,body TEXT,UNIQUE(source,url,content_hash));
 CREATE TABLE IF NOT EXISTS observations(id BIGSERIAL PRIMARY KEY,match_id TEXT REFERENCES matches(id),observed_at TEXT,payload TEXT NOT NULL,UNIQUE(match_id,observed_at,payload));
+CREATE TABLE IF NOT EXISTS players(id TEXT PRIMARY KEY,name TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS player_aliases(source TEXT,source_id TEXT,name TEXT NOT NULL,team_id TEXT REFERENCES teams(id),player_id TEXT REFERENCES players(id),PRIMARY KEY(source,source_id));
+CREATE TABLE IF NOT EXISTS player_match_stats(match_id TEXT REFERENCES matches(id),player_id TEXT REFERENCES players(id),team_id TEXT REFERENCES teams(id),starter INTEGER NOT NULL,minutes DOUBLE PRECISION NOT NULL,xg DOUBLE PRECISION NOT NULL,xa DOUBLE PRECISION NOT NULL,position TEXT NOT NULL DEFAULT '',PRIMARY KEY(match_id,player_id));
+CREATE TABLE IF NOT EXISTS lineup_snapshots(id BIGSERIAL PRIMARY KEY,match_id TEXT REFERENCES matches(id),source TEXT NOT NULL,source_fixture_id TEXT NOT NULL,captured_at TEXT NOT NULL,payload TEXT NOT NULL,UNIQUE(match_id,source,captured_at));
 CREATE TABLE IF NOT EXISTS quotes(id BIGSERIAL PRIMARY KEY,match_id TEXT REFERENCES matches(id),market TEXT,selection TEXT,line DOUBLE PRECISION,player TEXT NOT NULL DEFAULT '',rules TEXT NOT NULL,bookmaker TEXT,odds DOUBLE PRECISION,quoted_at TEXT,collected_at TEXT,source TEXT,url TEXT,verified INTEGER NOT NULL DEFAULT 0,fingerprint TEXT UNIQUE);
 CREATE TABLE IF NOT EXISTS models(id BIGSERIAL PRIMARY KEY,competition TEXT,created_at TEXT,cutoff TEXT,samples INTEGER,payload TEXT,metrics TEXT);
 CREATE TABLE IF NOT EXISTS predictions(id BIGSERIAL PRIMARY KEY,match_id TEXT REFERENCES matches(id),model_id BIGINT REFERENCES models(id),created_at TEXT,kickoff TEXT,payload TEXT,features TEXT,UNIQUE(match_id,model_id,kickoff,features));
@@ -111,6 +115,7 @@ CREATE TABLE IF NOT EXISTS quarantine(id BIGSERIAL PRIMARY KEY,source TEXT,reaso
 CREATE INDEX IF NOT EXISTS matches_kickoff ON matches(kickoff);
 CREATE INDEX IF NOT EXISTS quotes_match ON quotes(match_id,id);
 CREATE INDEX IF NOT EXISTS predictions_match ON predictions(match_id,id);
+CREATE INDEX IF NOT EXISTS player_match_stats_player ON player_match_stats(player_id,match_id);
 """
 
 
