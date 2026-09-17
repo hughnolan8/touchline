@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from backend.db import connect, now
 from backend.engine import current_model, current_player_model
-from backend.playerstats import lineup_features, resolve_player, save_roster
+from backend.playerstats import latest_lineup_snapshot, lineup_features, resolve_player, save_lineup_snapshot, save_roster
 from backend.providers import ingest_match
 
 
@@ -50,3 +50,18 @@ def test_shadow_model_never_replaces_baseline_selection():
         c.execute("INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES('E0',?,?,?,?,?)", (now(), now(), 40, '{}', '{\"method\":\"Dixon-Coles + confirmed XI\"}'))
         assert current_model(c)['metrics'].find('confirmed XI') == -1
         assert 'confirmed XI' in current_player_model(c)['metrics']
+
+
+def test_lineup_snapshot_is_timestamped_and_never_available_before_capture():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    with connect() as c:
+        fixture = add_match(c, 'snapshot', start + timedelta(days=1))
+        xi = [{'id': f'a-{n}', 'name': f'A {n}'} for n in range(11)]
+        lineups = {'home': xi, 'away': xi}
+        captured = (start + timedelta(hours=12)).isoformat()
+        assert save_lineup_snapshot(c, fixture, 'test', 'snapshot', lineups, captured)
+        assert latest_lineup_snapshot(c, fixture, (start + timedelta(hours=11)).isoformat()) is None
+        snapshot = latest_lineup_snapshot(c, fixture, captured)
+        assert snapshot['captured_at'] == captured
+        assert snapshot['lineups'] == lineups
+        assert not save_lineup_snapshot(c, fixture, 'test', 'late', lineups, (start + timedelta(days=2)).isoformat())

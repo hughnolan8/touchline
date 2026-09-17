@@ -79,7 +79,12 @@ def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observ
 
 
 def import_epl_results(connection, seasons, client_factory=UnderstatClient):
-    """Import only completed EPL results for the score-only backtest."""
+    """Import completed results and their per-match player observations.
+
+    The roster is stored against its own completed fixture.  Feature builders
+    later filter those observations by kickoff, so walk-forward fitting cannot
+    see a player's target-match or future performance.
+    """
     imported = 0
     with client_factory() as client:
         endpoint = client.league(league=LEAGUE)
@@ -97,5 +102,10 @@ def import_epl_results(connection, seasons, client_factory=UnderstatClient):
                     quarantine(connection, SOURCE, str(error), match)
                     continue
                 if match_id:
+                    if not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
+                        try:
+                            save_roster(connection, match_id, client.match(match=str(source_id)).get_roster_data(timeout=REQUEST_TIMEOUT))
+                        except Exception as error:
+                            quarantine(connection, SOURCE, f'Roster import failed: {error}', {'match_id': source_id})
                     imported += 1
     return imported

@@ -1,5 +1,6 @@
 """Leakage-safe player feature storage and confirmed-XI aggregation."""
 import hashlib
+import json
 import math
 from datetime import datetime
 
@@ -68,6 +69,39 @@ def save_roster(c, match_id, sides):
                 quarantine(c, SOURCE, str(error), {'match_id': match_id, 'row': value})
     return inserted
 
+def save_lineup_snapshot(c, match_id, source, source_fixture_id, lineups, captured_at=None):
+    """Persist a known XI with the time it became available.
+
+    A snapshot is deliberately separate from completed-match player statistics:
+    the former is an input that may be used for a pre-kickoff prediction, while
+    the latter is only an outcome observation.  This timestamp is what keeps a
+    replay from accidentally using a lineup learned after the fixture started.
+    """
+    captured_at = captured_at or now()
+    match = c.execute('SELECT kickoff FROM matches WHERE id=?', (match_id,)).fetchone()
+    if not match or datetime.fromisoformat(captured_at) > datetime.fromisoformat(match['kickoff']):
+        return False
+    if not isinstance(lineups, dict) or set(lineups) != {'home', 'away'}:
+        return False
+    if any(not isinstance(lineups[side], list) or len(lineups[side]) != 11 for side in lineups):
+        return False
+    c.execute('INSERT OR IGNORE INTO lineup_snapshots(match_id,source,source_fixture_id,captured_at,payload) VALUES(?,?,?,?,?)',
+              (match_id, source, str(source_fixture_id), captured_at, dump(lineups)))
+    return True
+
+def latest_lineup_snapshot(c, match_id, at):
+    """Return the last complete XI that was known no later than ``at``."""
+    row = c.execute('SELECT captured_at,payload FROM lineup_snapshots WHERE match_id=? AND captured_at<=? ORDER BY captured_at DESC,id DESC LIMIT 1', (match_id, at)).fetchone()
+    if not row:
+        return None
+    try:
+        lineups = json.loads(row['payload'])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(lineups, dict) or set(lineups) != {'home', 'away'} or any(not isinstance(lineups[side], list) or len(lineups[side]) != 11 for side in lineups):
+        return None
+    return {'captured_at': row['captured_at'], 'lineups': lineups}
+
 def lineup_features(c, match_id, side, lineup, cutoff):
     """Return XI xG/xA totals using only appearances before ``cutoff``."""
     match = c.execute('SELECT home,away FROM matches WHERE id=?', (match_id,)).fetchone()
@@ -77,7 +111,7 @@ def lineup_features(c, match_id, side, lineup, cutoff):
     baseline = (_number(league[0]), _number(league[1]))
     starters = []
     for player in lineup:
-        player_id = player.get('internal_id') or resolve_player(c, 'api-football', player.get('id'), player.get('name', ''), team_id, create=False)
+        player_id = player.get('internal_id') or resolve_player(c, player.get('source', ''), player.get('id'), player.get('name', ''), team_id, create=False)
         if not player_id: return None
         records = rows(c, "SELECT p.*,m.kickoff FROM player_match_stats p JOIN matches m ON m.id=p.match_id WHERE p.player_id=? AND m.kickoff<?", (player_id, cutoff))
         weighted_minutes = weighted_xg = weighted_xa = 0.0

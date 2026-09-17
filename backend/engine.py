@@ -4,7 +4,7 @@ from datetime import datetime,timedelta
 from zoneinfo import ZoneInfo
 from .db import connect,rows,now,dump,setting,set_setting
 from .models import fit_dixon_coles,predict_1x2
-from .playerstats import historical_lineups, lineup_features
+from .playerstats import historical_lineups, latest_lineup_snapshot, lineup_features
 LEAGUE='E0';STARTING_BANKROLL=1000.;KELLY_FRACTION=.25;MAX_BET_FRACTION=.02;MIN_FALLBACK_STAKE=1.
 def seconds(a,b):return (datetime.fromisoformat(a)-datetime.fromisoformat(b)).total_seconds()
 def is_bet_day(kickoff,at):
@@ -45,7 +45,14 @@ def matches(c,upcoming=True,at=None):
  start,end=fixture_window(at)
  return rows(c,q+" AND m.status='scheduled' AND m.kickoff>? AND m.kickoff<=? ORDER BY m.kickoff",(start,end))
 def forecast(c,m,at=None):
- at=at or now();model=current_model(c)
+ at=at or now()
+ # A confirmed XI is a first-class input to the production forecast.  The
+ # baseline remains available when no XI was captured before prediction time.
+ snapshot=latest_lineup_snapshot(c,m['id'],at)
+ if snapshot:
+  player=forecast_player(c,m,snapshot['lineups'],snapshot['captured_at'],at)
+  if player:return player
+ model=current_model(c)
  if not model:return None
  # Models are trained against stable canonical team IDs, not display labels.
  p=predict_1x2(json.loads(model['payload']),m['home'],m['away'])
@@ -86,7 +93,7 @@ def place_required_bet(c,m,p,at=None):
  if not choices:set_setting(c,'blocked:'+m['id'],{'at':at,'reason':'No complete verified 1X2 market'});return 'blocked: odds unavailable'
  x=max(choices,key=lambda x:x['edge']);wallet=account(c);k=max(0,(x['probability']*x['odds']-1)/(x['odds']-1));stake=max(MIN_FALLBACK_STAKE,math.floor(wallet['balance']*k*KELLY_FRACTION*100)/100);stake=min(stake,math.floor(min(wallet['available'],wallet['balance']*MAX_BET_FRACTION)*100)/100)
  if stake<MIN_FALLBACK_STAKE:return 'blocked: bankroll unavailable'
- snap={**x,'model':'Dixon-Coles','staking':{'mode':'fractional-kelly' if k else 'minimum-fallback','bankroll':wallet['balance'],'full_kelly':k}}
+ snap={**x,'model':p.get('model','Dixon-Coles'),'staking':{'mode':'fractional-kelly' if k else 'minimum-fallback','bankroll':wallet['balance'],'full_kelly':k}}
  try:c.execute('INSERT INTO bets(portfolio,match_id,quote_id,prediction_id,created_at,stake,snapshot) VALUES(?,?,?,?,?,?,?)',('automatic',m['id'],x['quote_id'],None,at,stake,dump(snap)))
  except sqlite3.IntegrityError:return 'already placed'
  return 'placed'

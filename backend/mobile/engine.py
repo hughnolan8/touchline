@@ -1,9 +1,8 @@
 """One five-minute Premier League worker; no queue or trainer service."""
-import json,logging
+import logging
 from backend.db import connect,now,setting,set_setting
-from backend.engine import best_market,matches,train,train_player,forecast,forecast_player,place_required_bet,settle,seconds
+from backend.engine import best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds
 from backend.understat import season_start,sync_epl_seasons
-from backend.lineups import ApiFootball,LineupError
 from .provider import MobileOdds
 from .store import acquire,release
 def import_scores(at=None):
@@ -68,22 +67,7 @@ def tick(at=None):
      p=forecast(c,m,at)
      result=place_required_bet(c,m,p,at) if p else 'blocked: model unavailable'
      set_setting(c,'refreshed:'+m['id'],{'at':at,'result':result})
-  # XI forecasts are deliberately shadow-only: baseline bets above remain the
-  # sole ledger decision while the player model earns its evaluation sample.
-  with connect() as c:lineup_due=[m for m in matches(c,at=at) if 15<=seconds(m['kickoff'],at)/60<=40]
-  confirmed=0
-  if lineup_due:
-   feed=ApiFootball()
-   try:
-    with connect() as c:
-     for m in lineup_due:
-      try:
-       stored=c.execute("SELECT captured_at,payload FROM lineup_snapshots WHERE match_id=? AND source='api-football' ORDER BY id DESC LIMIT 1",(m['id'],)).fetchone()
-       snapshot={'captured_at':stored['captured_at'],'lineups':json.loads(stored['payload'])} if stored else feed.confirmed(c,m)
-       if snapshot and forecast_player(c,m,snapshot['lineups'],snapshot['captured_at'],at):confirmed+=1
-      except LineupError as error: logging.warning('lineup_refresh failed fixture=%s error=%s',m['id'],error)
-   finally:feed.close()
   settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)
-  return {'ok':True,'refreshed':len(due),'lineup_forecasts':confirmed,'settled':settled}
+  return {'ok':True,'refreshed':len(due),'settled':settled}
  finally:release('engine',token)
