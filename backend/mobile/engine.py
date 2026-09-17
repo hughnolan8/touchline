@@ -22,14 +22,13 @@ def bootstrap(at=None):
  return True
 def refresh_all(at=None):
  at=at or now();bootstrap(at);import_scores(at)
- with connect() as c:
-  train(c,at)
+ with connect() as c:train(c,at);upcoming=matches(c,at=at)
  odds=MobileOdds()
- try:count=odds.refresh(at)
+ try:count=odds.refresh(upcoming,at)
  finally:odds.close()
  with connect() as c:
   placed=[]
-  for m in matches(c,at=at):
+  for m in upcoming:
    p=forecast(c,m,at)
    if p:placed.append(place_required_bet(c,m,p,at))
   set_setting(c,'last_manual_refresh',at)
@@ -39,13 +38,13 @@ def refresh_all(at=None):
 def refresh_missing_odds(at=None):
  at=at or now()
  with connect() as c:
-  missing=[m['id'] for m in matches(c,at=at) if not best_market(c,m['id'])]
+  missing=[m for m in matches(c,at=at) if not best_market(c,m['id'])]
  if not missing:return {'requested':0,'fixtures':0,'still_missing':0}
  odds=MobileOdds()
- try:count=odds.refresh(at)
+ try:count=odds.refresh(missing,at)
  finally:odds.close()
  with connect() as c:
-  remaining=sum(not bool(best_market(c,match_id)) for match_id in missing)
+  remaining=sum(not bool(best_market(c,m['id'])) for m in missing)
   set_setting(c,'last_missing_odds_refresh',at)
  return {'requested':len(missing),'fixtures':count,'still_missing':remaining}
 def tick(at=None):
@@ -60,7 +59,7 @@ def tick(at=None):
    due=[m for m in matches(c,at=at) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'refreshed:'+m['id']) is None]
   if due:
    odds=MobileOdds()
-   try:odds.refresh(at)
+   try:odds.refresh(due,at)
    finally:odds.close()
    with connect() as c:
     train(c,at)

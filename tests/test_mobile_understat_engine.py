@@ -35,12 +35,13 @@ def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monke
     calls = []
 
     class Odds:
-        def refresh(self, value):
-            calls.append(value)
+        def refresh(self, fixtures, value):
+            calls.append((fixtures, value))
             return 1
         def close(self):
             pass
 
     monkeypatch.setattr(engine, 'MobileOdds', Odds)
     assert engine.refresh_missing_odds(at) == {'requested': 1, 'fixtures': 1, 'still_missing': 1}
-    assert calls == [at]
+    assert calls[0][0][0]['id']
+    assert calls[0][1] == at
