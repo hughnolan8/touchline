@@ -1,5 +1,6 @@
 """The Odds API adapter for Premier League 1X2 prices only."""
 import math
+from datetime import datetime,timedelta
 from .db import stamp,quarantine
 from .providers import ingest_match,add_quote
 SPORT='soccer_epl'
@@ -7,11 +8,12 @@ BOOKS={'bet365':'Bet365','betfair_sb_uk':'Betfair Sportsbook','betvictor':'BetVi
 class OddsApiError(Exception):pass
 def parse_events(c,events,observed):
     count=0
+    cutoff=(datetime.fromisoformat(observed)+timedelta(days=7)).isoformat()
     for event in events:
         try:
             if event.get('sport_key')!=SPORT:raise ValueError('Unexpected sport')
             kickoff=stamp(event['commence_time'])
-            if kickoff<=observed:continue
+            if not observed<kickoff<=cutoff:continue
             mid=ingest_match(c,'the-odds-api',str(event['id']),'E0',event['home_team'],event['away_team'],kickoff,True,'scheduled',{},observed)
             if not mid:continue
             for book in event.get('bookmakers',[]):
