@@ -9,7 +9,7 @@ from pathlib import Path
 from . import postgres
 
 COMPETITIONS = {'E0': 'Premier League'}
-DEFAULT_STRATEGY = dict(enabled=True, stake=10.0, min_edge=0.05, max_exposure=0.10, max_quote_age=15, window_start=60, window_end=15, version=1, stake_mode='kelly', kelly_fraction=0.25, max_bet_fraction=0.02, min_stake=1.0)
+DEFAULT_STRATEGY = dict(enabled=True, stake=10.0, min_edge=0.05, max_exposure=0.10, max_quote_age=15, window_start=60, window_end=15, version=2, stake_mode='kelly', kelly_fraction=0.25, max_bet_fraction=0.02, min_stake=1.0, active_model='baseline-v1')
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def stamp(value):
@@ -74,8 +74,10 @@ def _init():
         CREATE TABLE IF NOT EXISTS lineup_snapshots(id INTEGER PRIMARY KEY,match_id TEXT REFERENCES matches(id),source TEXT NOT NULL,source_fixture_id TEXT NOT NULL,captured_at TEXT NOT NULL,payload TEXT NOT NULL,UNIQUE(match_id,source,captured_at));
         CREATE TABLE IF NOT EXISTS quotes(id INTEGER PRIMARY KEY,match_id TEXT REFERENCES matches(id),market TEXT,selection TEXT,line REAL,player TEXT NOT NULL DEFAULT '',rules TEXT NOT NULL,bookmaker TEXT,odds REAL,quoted_at TEXT,collected_at TEXT,source TEXT,url TEXT,verified INTEGER NOT NULL DEFAULT 0,fingerprint TEXT UNIQUE);
         CREATE TABLE IF NOT EXISTS models(id INTEGER PRIMARY KEY,competition TEXT,created_at TEXT,cutoff TEXT,samples INTEGER,payload TEXT,metrics TEXT);
+        CREATE TABLE IF NOT EXISTS model_evaluations(id INTEGER PRIMARY KEY,model_version TEXT NOT NULL,created_at TEXT NOT NULL,started_at TEXT,ended_at TEXT,fixtures INTEGER NOT NULL,metrics TEXT NOT NULL,benchmark TEXT NOT NULL,eligible INTEGER NOT NULL DEFAULT 0,UNIQUE(model_version,started_at,ended_at));
         CREATE TABLE IF NOT EXISTS predictions(id INTEGER PRIMARY KEY,match_id TEXT REFERENCES matches(id),model_id INTEGER REFERENCES models(id),created_at TEXT,kickoff TEXT,payload TEXT,features TEXT,UNIQUE(match_id,model_id,kickoff,features));
         CREATE TABLE IF NOT EXISTS bets(id INTEGER PRIMARY KEY,portfolio TEXT CHECK(portfolio IN ('automatic','manual')),match_id TEXT REFERENCES matches(id),quote_id INTEGER REFERENCES quotes(id),prediction_id INTEGER REFERENCES predictions(id),created_at TEXT,stake REAL,snapshot TEXT,status TEXT DEFAULT 'open',profit REAL,settled_at TEXT,reason TEXT,UNIQUE(portfolio,quote_id));
+        CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY,match_id TEXT REFERENCES matches(id),prediction_id INTEGER REFERENCES predictions(id),created_at TEXT NOT NULL,model_version TEXT NOT NULL,decision TEXT NOT NULL,reason TEXT NOT NULL,snapshot TEXT NOT NULL,UNIQUE(match_id,model_version,decision));
         CREATE UNIQUE INDEX IF NOT EXISTS one_auto_fixture ON bets(match_id) WHERE portfolio='automatic';
         CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY,kind TEXT,status TEXT DEFAULT 'queued',created_at TEXT,finished_at TEXT,message TEXT);
         CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,status TEXT,checked_at TEXT,records INTEGER,message TEXT);
@@ -84,6 +86,7 @@ def _init():
         CREATE INDEX IF NOT EXISTS quotes_match ON quotes(match_id,id);
         CREATE INDEX IF NOT EXISTS predictions_match ON predictions(match_id,id);
         CREATE INDEX IF NOT EXISTS player_match_stats_player ON player_match_stats(player_id,match_id);
+        CREATE INDEX IF NOT EXISTS decisions_match ON decisions(match_id,id);
         ''')
         old=c.execute("SELECT sql FROM sqlite_master WHERE name='observations'").fetchone()[0]
         if 'UNIQUE(match_id,payload)' in old:

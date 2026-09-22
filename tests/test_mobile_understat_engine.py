@@ -79,3 +79,20 @@ def test_tick_only_places_a_bet_after_fotmob_confirms_the_lineup(monkeypatch):
     assert [call[0] for call in calls] == ['lineups', 'odds']
     with connect() as connection:
         assert connection.execute("SELECT 1 FROM settings WHERE key LIKE 'lineup-refreshed:%'").fetchone()
+
+
+def test_early_odds_window_only_prepares_forecasts(monkeypatch):
+    at = '2026-09-17T12:00:00+00:00'
+    with connect() as connection:
+        ingest_match(connection, 'test', 'early-window', 'E0', 'Arsenal', 'Chelsea', '2026-09-17T12:58:00+00:00', True, 'scheduled', {})
+    monkeypatch.setattr(engine, 'bootstrap', lambda value: False)
+    monkeypatch.setattr(engine, 'train', lambda *args: 1)
+    monkeypatch.setattr(engine, 'train_player', lambda *args: 2)
+    monkeypatch.setattr(engine, 'forecast', lambda *args: {'model': 'Dixon-Coles', 'probabilities': {}})
+    monkeypatch.setattr(engine, 'place_required_bet', lambda *args: (_ for _ in ()).throw(AssertionError('must not place early')))
+    class Odds:
+        def refresh(self, fixtures, value): return 1
+        def close(self): pass
+    monkeypatch.setattr(engine, 'MobileOdds', Odds)
+    result = engine.tick(at)
+    assert result['refreshed'] == 1

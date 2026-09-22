@@ -9,8 +9,9 @@ from collections import Counter
 from datetime import datetime
 
 from .engine import history
-from .models import fit_dixon_coles, predict_1x2
+from .models import XI_TUNING_CONFIGS, fit_dixon_coles, predict_1x2
 from .playerstats import historical_lineups
+from .db import dump, now, set_setting
 
 
 OUTCOMES = ('home', 'draw', 'away')
@@ -85,7 +86,7 @@ def walk_forward(connection, minimum_samples=40, retrain_days=1):
     return evaluations
 
 
-def walk_forward_player(connection, minimum_samples=40, retrain_days=1):
+def walk_forward_player(connection, minimum_samples=40, retrain_days=1, config=None):
     """Evaluate actual historical XIs with only pre-kickoff player data."""
     fixtures = completed_matches(connection); evaluations = []; models = {}
     for fixture in fixtures:
@@ -99,7 +100,7 @@ def walk_forward_player(connection, minimum_samples=40, retrain_days=1):
                 value = historical_lineups(connection, item['id'], item['kickoff'])
                 if value: train_features[item['id']] = value
             prior = [item for item in prior if item['id'] in train_features]
-            model = fit_dixon_coles(prior, fixture['kickoff'], train_features) if len(prior) >= minimum_samples else False
+            model = fit_dixon_coles(prior, fixture['kickoff'], train_features, version='xi-v2', config=config) if len(prior) >= minimum_samples else False
             models[interval] = model
         if model is False: continue
         prediction = predict_1x2(model, fixture['home'], fixture['away'], features)
@@ -138,3 +139,36 @@ def summary(evaluations, calibration_bins=10):
         'outcomes': {key: counts[key] for key in OUTCOMES},
         'calibration': calibration,
     }
+
+
+def evaluate_candidate(connection, minimum_samples=40, retrain_days=1):
+    """Persist the pre-registered baseline-vs-XI candidate comparison.
+
+    Market validation is deliberately prospective: historical odds are not
+    imported, so a candidate cannot become promotion-eligible before 200
+    timestamped XI forecasts have accumulated in the local ledger.
+    """
+    baseline = summary(walk_forward(connection, minimum_samples, retrain_days))
+    trials = [(config, summary(walk_forward_player(connection, minimum_samples, retrain_days, config))) for config in XI_TUNING_CONFIGS]
+    viable = [trial for trial in trials if trial[1]['fixtures'] and trial[1]['brier_score'] <= baseline['brier_score']]
+    selected_config, candidate = min(viable or trials, key=lambda trial: float('inf') if trial[1]['log_loss'] is None else trial[1]['log_loss'])
+    prospective = connection.execute("""SELECT COUNT(DISTINCT p.match_id) FROM predictions p
+        JOIN models m ON m.id=p.model_id JOIN quotes q ON q.match_id=p.match_id
+        WHERE m.metrics LIKE '%xi-v2%' AND p.features LIKE '%confirmed-xi%' AND q.verified=1""").fetchone()[0]
+    historical_ok = bool(candidate['fixtures'] >= minimum_samples and baseline['fixtures'] >= minimum_samples
+                         and candidate['log_loss'] < baseline['log_loss']
+                         and candidate['brier_score'] <= baseline['brier_score'])
+    eligible = historical_ok and prospective >= 200
+    metrics = {'baseline': baseline, 'candidate': candidate, 'delta': {
+        'log_loss': None if not candidate['fixtures'] or not baseline['fixtures'] else candidate['log_loss'] - baseline['log_loss'],
+        'brier_score': None if not candidate['fixtures'] or not baseline['fixtures'] else candidate['brier_score'] - baseline['brier_score'],
+    }}
+    fixtures = candidate['fixtures']
+    start = end = None
+    if candidate['fixtures']:
+        values = walk_forward_player(connection, minimum_samples, retrain_days, selected_config)
+        start, end = values[0]['kickoff'], values[-1]['kickoff']
+    connection.execute('INSERT INTO model_evaluations(model_version,created_at,started_at,ended_at,fixtures,metrics,benchmark,eligible) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(model_version,started_at,ended_at) DO UPDATE SET created_at=excluded.created_at,fixtures=excluded.fixtures,metrics=excluded.metrics,benchmark=excluded.benchmark,eligible=excluded.eligible',
+                       ('xi-v2', now(), start, end, fixtures, dump(metrics), dump({'prospective_xi_fixtures':prospective,'required':200}), int(eligible)))
+    set_setting(connection, 'xi_model_config', selected_config)
+    return {'model_version': 'xi-v2', 'eligible': eligible, 'historical_ok': historical_ok, 'prospective_xi_fixtures': prospective, 'selected_config': selected_config, **metrics}

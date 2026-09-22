@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 class Strategy(BaseModel):
     enabled:bool=True
     stake_mode:Literal['flat','kelly']='kelly'
+    active_model:Literal['baseline-v1','xi-v2']='baseline-v1'
     kelly_fraction:float=Field(default=.25,gt=0,le=1,allow_inf_nan=False)
     max_bet_fraction:float=Field(default=.02,gt=0,le=.10,allow_inf_nan=False)
     min_stake:float=Field(default=1,ge=.01,le=100,multiple_of=.01,allow_inf_nan=False)

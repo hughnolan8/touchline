@@ -1,7 +1,7 @@
 """One five-minute Premier League worker; no queue or trainer service."""
 import logging
 from backend.db import connect,now,setting,set_setting
-from backend.engine import best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds
+from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds
 from backend.playerstats import latest_lineup_snapshot
 from backend.understat import season_start,sync_epl_seasons
 from .provider import MobileOdds
@@ -34,8 +34,11 @@ def refresh_all(at=None):
    # A manual refresh is never allowed to bypass the confirmed-XI gate.
    if not latest_lineup_snapshot(c,m['id'],at):
     placed.append('blocked: confirmed lineup unavailable');continue
-   p=forecast(c,m,at)
-   placed.append(place_required_bet(c,m,p,at) if p and p.get('model')=='Dixon-Coles + confirmed XI' else 'blocked: player model unavailable')
+   baseline=forecast(c,m,at,BASELINE_VERSION)
+   candidate=forecast(c,m,at,XI_VERSION)
+   active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
+   p=candidate if active==XI_VERSION else baseline
+   placed.append(place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable')
   set_setting(c,'last_manual_refresh',at)
  result={'fixtures':count,'decisions':placed,'settled':settle(at)}
  logging.info('manual_refresh fixtures=%s decisions=%s settled=%s',count,len(placed),result['settled'])
@@ -69,14 +72,15 @@ def tick(at=None):
    with connect() as c:
     train(c,at);train_player(c,at)
     for m in due:
-     p=forecast(c,m,at)
-     result=place_required_bet(c,m,p,at) if p else 'blocked: model unavailable'
-     set_setting(c,'refreshed:'+m['id'],{'at':at,'result':result})
+     # This early window is price/model preparation only.  A bet must wait for
+     # a confirmed XI and a later fresh price.
+     forecast(c,m,at,BASELINE_VERSION)
+     set_setting(c,'refreshed:'+m['id'],{'at':at,'result':'prepared'})
   # FotMob typically publishes official XIs about 30 minutes before kickoff.
   # Do not mark a fixture complete unless a valid 11-versus-11 snapshot was
   # saved; a subsequent five-minute cycle can retry while the window remains.
   with connect() as c:
-   lineup_due=[m for m in matches(c,at=at) if 25<=seconds(m['kickoff'],at)/60<=30 and setting(c,'lineup-refreshed:'+m['id']) is None]
+   lineup_due=[m for m in matches(c,at=at) if 15<=seconds(m['kickoff'],at)/60<=30 and setting(c,'lineup-refreshed:'+m['id']) is None]
   captured=[]
   if lineup_due:
    lineups=FotMobLineups()
@@ -90,8 +94,13 @@ def tick(at=None):
    with connect() as c:
     train(c,at);train_player(c,at)
     for m in selected:
-     p=forecast(c,m,at)
-     result=place_required_bet(c,m,p,at) if p and p.get('model')=='Dixon-Coles + confirmed XI' else 'blocked: player model unavailable'
+     # Persist both forecasts for validation.  The active version controls the
+     # paper decision, while the other remains a shadow forecast.
+     baseline=forecast(c,m,at,BASELINE_VERSION)
+     candidate=forecast(c,m,at,XI_VERSION)
+     active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
+     p=candidate if active==XI_VERSION else baseline
+     result=place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable'
      set_setting(c,'lineup-refreshed:'+m['id'],{'at':at,'result':result})
   settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)

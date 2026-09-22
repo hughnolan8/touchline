@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from backend.backtest import summary, walk_forward, walk_forward_player
+from backend.backtest import evaluate_candidate, summary, walk_forward, walk_forward_player
 from backend.playerstats import save_roster
 from backend.db import connect, dump, now
 from backend.providers import ingest_match
@@ -32,6 +32,15 @@ def test_walk_forward_uses_only_prior_results_and_reports_probability_metrics():
 
 def test_backtest_summary_handles_no_eligible_fixtures():
     assert summary([])['fixtures'] == 0
+
+
+def test_candidate_evaluation_is_persisted_and_not_promotable_without_market_history():
+    with connect() as connection:
+        report = evaluate_candidate(connection)
+        row = connection.execute('SELECT model_version,eligible FROM model_evaluations').fetchone()
+    assert report['eligible'] is False
+    assert row['model_version'] == 'xi-v2'
+    assert row['eligible'] == 0
 
 
 def test_walk_forward_reuses_models_for_simultaneous_fixtures(monkeypatch):

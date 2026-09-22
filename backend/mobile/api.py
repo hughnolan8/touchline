@@ -62,11 +62,12 @@ def create_app(setup=True):
    answer=[]
    for m in matches(c):
     p=forecast(c,m)
+    decision=c.execute('SELECT decision,reason,model_version FROM decisions WHERE match_id=? ORDER BY id DESC LIMIT 1',(m['id'],)).fetchone()
     shadow=c.execute("SELECT payload,features FROM predictions WHERE match_id=? AND features LIKE ? ORDER BY id DESC LIMIT 1",(m['id'],'%confirmed-xi%')).fetchone()
     xi=None
     if shadow:
      player=json.loads(shadow['payload']);features=json.loads(shadow['features'])['lineups'];xi={'status':'confirmed','captured_at':player['lineup_captured_at'],'home':{'adjustment':player['lineup_adjustment']['home'],'contributors':features['home']['starters']},'away':{'adjustment':player['lineup_adjustment']['away'],'contributors':features['away']['starters']}}
-    if p:answer.append({'id':m['id'],'home':m['home_name'],'away':m['away_name'],'competition':'Premier League','kickoff':m['kickoff'],'model':p['model'],'selections':discrepancies(c,m,p),'stats':{'home':{'xg':p['home_goals'],'form':recent_form(c,m['home'])},'away':{'xg':p['away_goals'],'form':recent_form(c,m['away'])},'xi':xi or {'status':'awaiting'}}})
+    if p:answer.append({'id':m['id'],'home':m['home_name'],'away':m['away_name'],'competition':'Premier League','kickoff':m['kickoff'],'model':p['model'],'model_version':p.get('model_version'),'forecast_status':'ready','decision':dict(decision) if decision else None,'selections':discrepancies(c,m,p),'stats':{'home':{'xg':p['home_goals'],'form':recent_form(c,m['home'])},'away':{'xg':p['away_goals'],'form':recent_form(c,m['away'])},'xi':xi or {'status':'awaiting'}}})
    return answer
  @app.get('/api/v1/bets')
  def bets():

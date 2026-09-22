@@ -28,6 +28,15 @@ use `--start-season 2018 --end-season 2025` for a wider history, or
 For long histories, `--retrain-days 28` reuses a fit for up to 28 calendar days
 while retaining a strictly historical training cutoff.
 
+The report also persists a baseline-versus-confirmed-XI candidate evaluation.
+The XI model remains a shadow model until it passes its historical checks and
+200 timestamped live XI/market observations have accumulated. An operator can
+then promote it explicitly (the baseline is the safe default):
+
+```sh
+.pythonenv/bin/python scripts/promote-model.py --model xi-v2
+```
+
 ## Railway continuous deployment
 
 The repository remote is GitHub. In Railway, open the project and connect each deployable service (`api` and `engine`) to `hughnolan8/touchline`, select the `main` branch, and enable **Deploy on Push**. Subsequent pushes to `main` will then deploy automatically; the local `scripts/deploy-railway.py` script is only needed for manual deployments.

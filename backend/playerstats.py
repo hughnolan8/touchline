@@ -123,7 +123,25 @@ def lineup_features(c, match_id, side, lineup, cutoff):
         xg90 = strength * (weighted_xg / weighted_minutes * 90 if weighted_minutes else 0) + (1-strength) * baseline[0]
         xa90 = strength * (weighted_xa / weighted_minutes * 90 if weighted_minutes else 0) + (1-strength) * baseline[1]
         starters.append({'id': player_id, 'name': player.get('name'), 'xg90': xg90, 'xa90': xa90, 'contribution': xg90 + xa90})
-    return {'xg90': sum(x['xg90'] for x in starters), 'xa90': sum(x['xa90'] for x in starters), 'starters': sorted(starters, key=lambda x: x['contribution'], reverse=True)[:3]}
+    context = team_context(c, team_id, cutoff)
+    return {'xg90': sum(x['xg90'] for x in starters), 'xa90': sum(x['xa90'] for x in starters), 'starters': sorted(starters, key=lambda x: x['contribution'], reverse=True)[:3], **context}
+
+def team_context(c, team_id, cutoff):
+    """Pre-kickoff team context; never reads a match at or after ``cutoff``."""
+    games = rows(c, "SELECT home,away,kickoff,stats FROM matches WHERE competition='E0' AND status='finished' AND kickoff<? AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5", (cutoff, team_id, team_id))
+    cutoff_dt = datetime.fromisoformat(cutoff)
+    if not games:
+        return {'rest_days': 7.0, 'congestion': 0.0, 'attack_form': 0.0, 'defence_form': 0.0}
+    scored = conceded = 0.0
+    for game in games:
+        score = json.loads(game['stats'])
+        home_goals, away_goals = _number(score.get('hg')), _number(score.get('ag'))
+        mine, theirs = (home_goals, away_goals) if game['home'] == team_id else (away_goals, home_goals)
+        scored += mine; conceded += theirs
+    latest = datetime.fromisoformat(games[0]['kickoff'])
+    rest = max(0.0, min(21.0, (cutoff_dt - latest).total_seconds() / 86400))
+    recent = sum((cutoff_dt - datetime.fromisoformat(g['kickoff'])).total_seconds() <= 14 * 86400 for g in games)
+    return {'rest_days': rest, 'congestion': float(recent), 'attack_form': scored / len(games), 'defence_form': conceded / len(games)}
 
 def historical_lineups(c, match_id, cutoff):
     match = c.execute('SELECT home,away FROM matches WHERE id=?', (match_id,)).fetchone()

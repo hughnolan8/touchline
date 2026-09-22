@@ -4,7 +4,7 @@ from backend.db import set_setting
 
 def reset_simulation_data(connection):
     """Delete football-derived data while retaining database configuration."""
-    for table in ('bets', 'predictions', 'models', 'quotes', 'lineup_snapshots', 'player_match_stats', 'player_aliases',
+    for table in ('decisions', 'model_evaluations', 'bets', 'predictions', 'models', 'quotes', 'lineup_snapshots', 'player_match_stats', 'player_aliases',
                   'players', 'observations', 'match_aliases', 'aliases', 'matches', 'teams', 'snapshots', 'sources', 'quarantine'):
         connection.execute(f'DELETE FROM {table}')
     connection.execute(
