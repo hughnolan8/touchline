@@ -9,7 +9,7 @@ from backend.providers import add_quote, ingest_match
 
 
 def _placed_bet():
-    kickoff = (datetime.now(timezone.utc) + timedelta(minutes=58)).isoformat()
+    kickoff = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
     with connect() as c:
         match_id = ingest_match(c, 'test', 'notification', 'E0', 'Arsenal', 'Chelsea', kickoff, True, 'scheduled', {})
         for selection, odds in [('home', 2.4), ('draw', 3.4), ('away', 3.2)]:

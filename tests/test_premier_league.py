@@ -8,7 +8,7 @@ from backend.providers import ingest_match,add_quote
 def stamp(minutes):return (datetime.now(timezone.utc)+timedelta(minutes=minutes)).isoformat()
 def fixture():
  with connect() as c:
-  mid=ingest_match(c,'test','one','E0','Arsenal','Chelsea',stamp(58),True,'scheduled',{})
+  mid=ingest_match(c,'test','one','E0','Arsenal','Chelsea',stamp(5),True,'scheduled',{})
   for side,odds in [('home',2.4),('draw',3.4),('away',3.2)]:add_quote(c,mid,'1x2',side,None,'','Bet365',odds,now(),now(),'test','https://example.test',True)
   m=dict(c.execute("SELECT m.*,h.name home_name,a.name away_name FROM matches m JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away WHERE m.id=?",(mid,)).fetchone())
  return mid,m

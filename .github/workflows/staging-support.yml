@@ -1,0 +1,62 @@
+name: Staging release validation
+
+on:
+  deployment_status:
+    states: [success]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: shared-staging-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: >-
+      github.event.deployment.environment == 'staging' &&
+      github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - name: Validate public staging health
+        env:
+          DEPLOYMENT_API_URL: ${{ vars.STAGING_API_URL }}
+          DEPLOYMENT_ENVIRONMENT: staging
+        run: python scripts/check-production.py --timeout-seconds 600 --interval-seconds 30 | tee "$GITHUB_STEP_SUMMARY"
+      - name: Capture Railway error logs
+        if: always()
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/railway"
+          npx --yes @railway/cli@latest logs --project "$RAILWAY_PROJECT_ID" --environment staging --service api --since 20m --lines 200 --filter '@level:error' --json > "$RUNNER_TEMP/railway/api-errors.json"
+          npx --yes @railway/cli@latest logs --project "$RAILWAY_PROJECT_ID" --environment staging --service engine --since 20m --lines 200 --filter '@level:error' --json > "$RUNNER_TEMP/railway/engine-errors.json"
+          if grep -q '"message"' "$RUNNER_TEMP/railway/api-errors.json" "$RUNNER_TEMP/railway/engine-errors.json"; then
+            echo 'Railway reported error-level service logs after deployment.' >&2
+            exit 1
+          fi
+      - name: Upload Railway diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-railway-diagnostics
+          path: ${{ runner.temp }}/railway
+          if-no-files-found: ignore
+      - name: Create PR and enable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_REF: ${{ github.event.deployment.ref }}
+        run: |
+          branch="${DEPLOYMENT_REF#refs/heads/}"
+          case "$branch" in feature/*|fix/*|codex/*) ;; *) exit 0 ;; esac
+          pr=$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url')
+          if [ -z "$pr" ]; then
+            pr=$(gh pr create --base main --head "$branch" --fill)
+          fi
+          gh pr merge --auto --squash "$pr"

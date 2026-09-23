@@ -1,0 +1,35 @@
+name: Roll back production
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or tag to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Deploy selected API revision
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment production --service api
+      - name: Deploy selected engine revision
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment production --service engine

@@ -16,13 +16,17 @@ or dependencies.
    ```
 
 3. Review `git status --short`, stage only the completed change, then make one
-   focused commit and push it to `main`.
+   focused commit and push it to a release branch (`feature/**`, `fix/**`, or
+   `codex/**`). Staging validates it before GitHub opens and auto-merges the
+   pull request to `main`.
 
 Use `scripts/install-git-hooks.sh` once per clone to enable the local safety
 net. The pre-commit hook requires a Markdown update in `README.md` or `docs/`
 when application code is staged. The pre-push hook runs pytest. GitHub Actions
-runs the same documentation rule and test suite for pushes to `main` and pull
-requests.
+runs the same documentation rule and test suite for release branches, pull
+requests, and `main`. A passing release branch is deployed to shared staging;
+only the newest release branch retains that slot. See
+[CI/CD](features/ci-cd.md) for the deployment gate.
 
 The checks can demonstrate the test and documentation requirements, but no
 automated check can prove an agent applied Ponytail's reasoning. The durable

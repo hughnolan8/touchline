@@ -3,7 +3,7 @@ name: Quality
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'feature/**', 'fix/**', 'codex/**']
 
 jobs:
   test:

@@ -1,4 +1,4 @@
-"""Read-only public production health check for GitHub Actions."""
+"""Read-only public deployment health check for GitHub Actions."""
 import argparse
 import json
 import os
@@ -66,8 +66,8 @@ def monitor(base_url, timeout_seconds=600, interval_seconds=60, request=fetch, c
         wait(min(interval_seconds, max(0, deadline - timer())))
 
 
-def report(ok, results, problems, last_success):
-    lines = ['## Production support check', '', f"**Result:** {'pass' if ok else 'fail'}", '']
+def report(ok, results, problems, last_success, environment):
+    lines = [f'## {environment.title()} deployment support check', '', f"**Result:** {'pass' if ok else 'fail'}", '']
     for name in ('api', 'engine', 'summary'):
         result = results[name]
         detail = str(result['status']) if result['status'] is not None else result.get('error', 'unavailable')
@@ -80,7 +80,8 @@ def report(ok, results, problems, last_success):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base-url', default=os.environ.get('PRODUCTION_API_URL'))
+    parser.add_argument('--base-url', default=os.environ.get('DEPLOYMENT_API_URL') or os.environ.get('PRODUCTION_API_URL'))
+    parser.add_argument('--environment', default=os.environ.get('DEPLOYMENT_ENVIRONMENT', 'production'))
     parser.add_argument('--config', type=Path, default=Path(__file__).resolve().parents[1] / 'data/runtime/railway.json')
     parser.add_argument('--timeout-seconds', type=int, default=600)
     parser.add_argument('--interval-seconds', type=int, default=60)
@@ -89,7 +90,7 @@ def main():
         parser.error('timeout must be non-negative and interval must be positive')
     base_url = (args.base_url or json.loads(args.config.read_text())['mobile_api_url']).rstrip('/')
     ok, results, problems, last_success = monitor(base_url, args.timeout_seconds, args.interval_seconds)
-    print(report(ok, results, problems, last_success))
+    print(report(ok, results, problems, last_success, args.environment))
     return 0 if ok else 1
 
 
