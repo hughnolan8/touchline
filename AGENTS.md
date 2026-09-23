@@ -29,3 +29,12 @@ reviewable.
 feature guides; add a guide for a new meaningful capability and update its
 guide whenever that capability changes. `docs/engineering-workflow.md`
 explains the development safeguards.
+
+## Production support
+
+For a production-support request, inspect the public API health endpoints
+first, then Railway status and sanitized logs when the Railway CLI is
+available. Diagnose from evidence and report findings, but never deploy,
+restart, roll back, alter variables or secrets, or access/reset production
+data without the user's explicit approval. The push-triggered GitHub Actions
+check is read-only and validates public behaviour only.
