@@ -57,7 +57,7 @@ variables `RAILWAY_PROJECT_ID` and `STAGING_API_URL` (the latter only needs to
 exist for staging). Never commit these tokens or database URLs.
 
 Enable Codex's connected GitHub pull-request review. Protect `main`: require
-the `Quality` and `Staging release validation` checks, one Codex approval, no
+the GitHub Actions `test` and `validate` job checks, one Codex approval, no
 unresolved conversations, and no force pushes. Enable squash auto-merge. Open
 one test release PR to verify the exact Codex review identity before making its
 approval mandatory.
@@ -67,10 +67,11 @@ approval mandatory.
 1. A release branch passes Quality, including tests and documentation checks.
 2. The staging deploy workflow uploads that exact commit to staging `api` and
    `engine`. Newer release work cancels the older staging run.
-3. Railway's successful deployment status starts staging validation. It waits
-   for healthy public API/engine/summary responses and a fresh engine cycle,
-   then fails on structured application failures and traceback signatures in
-   Railway logs. Failed diagnostics are retained as a workflow artifact.
+3. After both Railway CLI deployments succeed, the staging deploy workflow
+   calls staging validation with that commit and branch. It waits for healthy
+   public API/engine/summary responses and a fresh engine cycle, then fails on
+   structured application failures and traceback signatures in Railway logs.
+   Failed diagnostics are retained as a workflow artifact.
 4. A passing release creates or updates its PR, requests Codex review, and
    enables GitHub auto-merge. Branch protection prevents merging until the
    required checks and approval pass.
