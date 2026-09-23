@@ -69,8 +69,8 @@ approval mandatory.
    `engine`. Newer release work cancels the older staging run.
 3. Railway's successful deployment status starts staging validation. It waits
    for healthy public API/engine/summary responses and a fresh engine cycle,
-   then fails on Railway error-level logs. Failed diagnostics are retained as a
-   workflow artifact.
+   then fails on structured application failures and traceback signatures in
+   Railway logs. Failed diagnostics are retained as a workflow artifact.
 4. A passing release creates or updates its PR, requests Codex review, and
    enables GitHub auto-merge. Branch protection prevents merging until the
    required checks and approval pass.

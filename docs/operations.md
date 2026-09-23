@@ -9,8 +9,8 @@ the job summary. A pass requires `/health`, `/health/engine`, and
 engine, and an engine cycle completed after the check started.
 
 With the `production` GitHub environment's `RAILWAY_TOKEN` configured, the
-workflow also fails on recent Railway error-level API or engine logs. It never
-repairs production. For diagnosis, ask a Codex agent to inspect the public
+workflow also fails on recent structured application failures and traceback
+signatures in Railway API or engine logs. It never repairs production. For diagnosis, ask a Codex agent to inspect the public
 endpoints first; it must request approval before making any production change.
 Its public API URL is an ordinary workflow environment value; update it there
 if the Railway domain changes.

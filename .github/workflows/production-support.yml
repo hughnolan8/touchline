@@ -25,16 +25,16 @@ jobs:
           DEPLOYMENT_API_URL: https://api-production-f10dd.up.railway.app
           DEPLOYMENT_ENVIRONMENT: production
         run: python scripts/check-production.py --timeout-seconds 600 --interval-seconds 60 >> "$GITHUB_STEP_SUMMARY"
-      - name: Inspect Railway error logs
+      - name: Inspect Railway failure logs
         if: ${{ secrets.RAILWAY_TOKEN != '' }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
         run: |
-          npx --yes @railway/cli@latest logs --project "$RAILWAY_PROJECT_ID" --environment production --service api --since 20m --lines 200 --filter '@level:error' --json > "$RUNNER_TEMP/api-errors.json"
-          npx --yes @railway/cli@latest logs --project "$RAILWAY_PROJECT_ID" --environment production --service engine --since 20m --lines 200 --filter '@level:error' --json > "$RUNNER_TEMP/engine-errors.json"
-          if grep -q '"message"' "$RUNNER_TEMP/api-errors.json" "$RUNNER_TEMP/engine-errors.json"; then
-            echo 'Railway reported error-level service logs after deployment.' >&2
+          npx --yes @railway/cli@latest logs --project "$RAILWAY_PROJECT_ID" --environment production --service api --since 20m --lines 200 --json > "$RUNNER_TEMP/api-errors.json"
+          npx --yes @railway/cli@latest logs --project "$RAILWAY_PROJECT_ID" --environment production --service engine --since 20m --lines 200 --json > "$RUNNER_TEMP/engine-errors.json"
+          if grep -Eq 'engine_cycle_failed|engine_unavailable|engine_timeout|Traceback|ERROR:|Exception in ASGI application' "$RUNNER_TEMP/api-errors.json" "$RUNNER_TEMP/engine-errors.json"; then
+            echo 'Railway reported an application failure after deployment.' >&2
             exit 1
           fi
       - name: Upload Railway diagnostics

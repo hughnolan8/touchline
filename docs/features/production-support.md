@@ -4,7 +4,7 @@ Pushes to `main` run a read-only GitHub Actions check after Railway's normal
 continuous deployment begins. The check polls the public API for up to ten
 minutes and records its result in the workflow job summary. When the protected
 GitHub environment has a Railway project token, it also rejects recent
-error-level API or engine logs.
+structured application failures and traceback signatures in API or engine logs.
 
 It requires the API and engine health endpoints to return success, and requires
 the summary endpoint to report paper mode, a running engine, and a newly
