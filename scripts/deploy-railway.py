@@ -13,7 +13,7 @@ args = parser.parse_args()
 cli = os.environ.get('RAILWAY_CLI') or shutil.which('railway')
 if not cli:
     raise SystemExit('Install the official Railway CLI and run railway login first.')
-config = json.loads((root / 'data/mobile/railway.json').read_text())
+config = json.loads((root / 'data/runtime/railway.json').read_text())
 for service in (['api', 'engine'] if args.service == 'all' else [args.service]):
     subprocess.run([cli, 'up', '--detach', '--json', '--project', config['project_id'],
                     '--environment', config['environment_id'], '--service', config['services'][service]], cwd=root, check=True)

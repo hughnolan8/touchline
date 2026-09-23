@@ -18,14 +18,14 @@ parser.add_argument('--kickoff', required=True, help='ISO-8601 kick-off with tim
 parser.add_argument('--at', help='Optional ISO-8601 current time with timezone')
 args = parser.parse_args()
 
-os.environ['MOBILE_ODDS_API_KEY'] = args.api_key
+os.environ['TOUCHLINE_ODDS_API_KEY'] = args.api_key
 os.environ.pop('DATABASE_URL', None)
 
 with tempfile.TemporaryDirectory(prefix='touchline-odds-') as directory:
     os.environ['ENGINE_DB'] = f'{directory}/engine.sqlite3'
     from backend.db import connect, now, stamp
-    from backend.mobile.provider import MobileOdds
-    from backend.mobile.store import initialize
+    from backend.app.provider import MobileOdds
+    from backend.app.store import initialize
     from backend.providers import ingest_match
 
     at = stamp(args.at or now())

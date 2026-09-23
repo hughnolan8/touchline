@@ -11,8 +11,8 @@ import time
 
 
 def run_once(mode):
-    from backend.mobile.store import configure, initialize
-    from backend.mobile.engine import tick
+    from backend.app.store import configure, initialize
+    from backend.app.engine import tick
     configure()
     initialize()
     result = tick()

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from .db import DEFAULT_STRATEGY,connect,rows,now,dump,setting,set_setting
 from .models import BASELINE_VERSION,XI_VERSION,fit_dixon_coles,predict_1x2
 from .playerstats import historical_lineups, latest_lineup_snapshot, lineup_features
-from .mobile.strategy import Strategy
+from .app.strategy import Strategy
 LEAGUE='E0';STARTING_BANKROLL=1000.;KELLY_FRACTION=.25;MAX_BET_FRACTION=.02;MIN_FALLBACK_STAKE=1.
 def seconds(a,b):return (datetime.fromisoformat(a)-datetime.fromisoformat(b)).total_seconds()
 def is_bet_day(kickoff,at):

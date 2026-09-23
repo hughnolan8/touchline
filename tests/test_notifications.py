@@ -4,7 +4,7 @@ import httpx
 
 from backend.db import connect, now
 from backend.engine import place_required_bet
-from backend.mobile import notifications
+from backend.app import notifications
 from backend.providers import add_quote, ingest_match
 
 

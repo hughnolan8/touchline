@@ -18,8 +18,8 @@ class MobileOdds:
    return response.json(),response
   except (httpx.HTTPError,ValueError):raise OddsApiError('Odds API request failed') from None
  def refresh(self,fixtures,at=None):
-  key=os.environ.get('MOBILE_ODDS_API_KEY')
-  if not key:raise OddsApiError('MOBILE_ODDS_API_KEY is not configured')
+  key=os.environ.get('TOUCHLINE_ODDS_API_KEY') or os.environ.get('MOBILE_ODDS_API_KEY')
+  if not key:raise OddsApiError('TOUCHLINE_ODDS_API_KEY is not configured')
   at=at or now();base={'apiKey':key,'dateFormat':'iso'}
   events,response=self._get('/events',base)
   wanted=[]

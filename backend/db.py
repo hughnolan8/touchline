@@ -17,7 +17,7 @@ def stamp(value):
     if dt.tzinfo is None: raise ValueError('Timestamp must include a timezone')
     return dt.astimezone(timezone.utc).isoformat()
 def dump(value): return json.dumps(value, separators=(',', ':'), allow_nan=False)
-def path(): return Path(os.environ.get('ENGINE_DB', 'data/mobile/engine.sqlite3'))
+def path(): return Path(os.environ.get('ENGINE_DB', 'data/runtime/engine.sqlite3'))
 
 @contextmanager
 def connect():

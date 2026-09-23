@@ -1,6 +1,21 @@
-from backend.mobile import engine
+from backend.app import engine
+from backend.app.store import initialize
 from backend.db import connect
 from backend.providers import ingest_match,add_quote
+
+
+def test_initialize_renames_legacy_app_state():
+    with connect() as connection:
+        connection.execute('DROP INDEX app_jobs_due')
+        connection.execute('ALTER TABLE app_leases RENAME TO mobile_leases')
+        connection.execute('ALTER TABLE app_jobs RENAME TO mobile_jobs')
+        connection.execute("UPDATE settings SET key='mobile_initialized' WHERE key='app_initialized'")
+    initialize()
+    with connect() as connection:
+        assert connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_leases'").fetchone()
+        assert connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_jobs'").fetchone()
+        assert connection.execute("SELECT 1 FROM settings WHERE key='app_initialized'").fetchone()
+        assert not connection.execute("SELECT 1 FROM settings WHERE key='mobile_initialized'").fetchone()
 
 
 def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):

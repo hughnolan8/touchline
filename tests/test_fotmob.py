@@ -1,4 +1,4 @@
-from backend.mobile.fotmob import FotMobLineups
+from backend.app.fotmob import FotMobLineups
 
 
 def test_fotmob_lineup_parser_requires_confirmed_complete_elevens():

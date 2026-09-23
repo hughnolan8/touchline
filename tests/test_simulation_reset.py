@@ -1,5 +1,5 @@
 from backend.db import connect, now
-from backend.mobile.reset import reset_simulation_data
+from backend.app.reset import reset_simulation_data
 from backend.providers import ingest_match
 
 
