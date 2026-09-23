@@ -97,6 +97,10 @@ def test_early_odds_window_only_prepares_forecasts(monkeypatch):
     class Odds:
         def refresh(self, fixtures, value): return 1
         def close(self): pass
+    class Lineups:
+        def refresh(self, fixtures, value): return []
+        def close(self): pass
     monkeypatch.setattr(engine, 'MobileOdds', Odds)
+    monkeypatch.setattr(engine, 'FotMobLineups', Lineups)
     result = engine.tick(at)
     assert result['refreshed'] == 1

@@ -6,7 +6,7 @@ from backend.playerstats import latest_lineup_snapshot
 from backend.understat import season_start,sync_epl_seasons
 from .provider import MobileOdds
 from .fotmob import FotMobLineups
-from .notifications import deliver_pending_bet_notifications
+from .notifications import deliver_pending_bet_notifications,deliver_pending_fixture_notifications,queue_fixture_notification
 from .store import acquire,release
 def import_scores(at=None):
  at=at or now()
@@ -69,13 +69,17 @@ def _place_confirmed(fixtures,captured,at):
   for m in selected:
    snapshot=initial_snapshot(c,m['id'])
    if not snapshot:
-    results.append('blocked: initial odds unavailable');continue
+    result='blocked: initial odds unavailable'
+    set_setting(c,'lineup-refreshed:'+m['id'],{'at':at,'result':result})
+    results.append(result);continue
    # Persist both forecasts for validation. The active version controls the
    # paper decision while the other remains a shadow forecast.
    baseline=forecast(c,m,at,BASELINE_VERSION);candidate=forecast(c,m,at,XI_VERSION)
    active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
    p=candidate if active==XI_VERSION else baseline
    result=place_required_bet(c,m,p,at,entry_snapshot=snapshot) if p else 'blocked: active model unavailable'
+   if result == 'blocked: active model unavailable':
+    queue_fixture_notification(c,m['id'],['active model forecast'])
    set_setting(c,'lineup-refreshed:'+m['id'],{'at':at,'result':result})
    results.append(result)
  return results
@@ -102,10 +106,22 @@ def tick(at=None):
   # Poll for the XI at the entry window, then retry through the 30 minute
   # cutoff. Prices are deliberately not refreshed during those retries.
   with connect() as c:
-   lineup_due=[m for m in matches(c,at=at) if initial_snapshot(c,m['id']) and setting(c,'lineup-refreshed:'+m['id']) is None and 30<=seconds(m['kickoff'],at)/60<=60]
+   lineup_due=[m for m in matches(c,at=at) if setting(c,'initial-odds-refreshed:'+m['id']) is not None and setting(c,'lineup-refreshed:'+m['id']) is None and 30<=seconds(m['kickoff'],at)/60<=60]
   captured=_capture_lineups(lineup_due,at)
   _place_confirmed(lineup_due,captured,at)
-  notified=deliver_pending_bet_notifications()
+  # At the first cycle after the 30-minute cutoff, explain why a fixture could
+  # not be considered. A normal no-bet strategy decision is deliberately silent.
+  with connect() as c:
+   missed=0
+   for m in matches(c,at=at):
+    if not 0<seconds(m['kickoff'],at)/60<30:continue
+    if c.execute("SELECT 1 FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone():continue
+    missing=[]
+    if not initial_snapshot(c,m['id']):missing.append('initial complete verified 1X2 odds')
+    if not latest_lineup_snapshot(c,m['id'],at):missing.append('confirmed starting XIs')
+    if missing:
+     queue_fixture_notification(c,m['id'],missing);missed+=1
+  notified=deliver_pending_bet_notifications()+deliver_pending_fixture_notifications()
   # A final refresh in the last five minutes establishes the market close.
   with connect() as c:
    closing_due=[]
@@ -125,5 +141,5 @@ def tick(at=None):
       closed+=1;set_setting(c,'closing-refreshed:'+m['id'],{'at':at,'result':'captured'})
   settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)
-  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'notified':notified,'closed':closed,'settled':settled}
+  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'missing_data_alerts':missed,'notified':notified,'closed':closed,'settled':settled}
  finally:release('engine',token)

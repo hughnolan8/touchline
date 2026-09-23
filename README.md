@@ -15,7 +15,7 @@ PUSHOVER_APP_TOKEN=<application API token>
 PUSHOVER_USER_KEY=<your Pushover user key>
 ```
 
-Optional variables are `PUSHOVER_DEVICE` to target one named device and `PUSHOVER_DASHBOARD_URL` to add an “Open Touchline” link. The API token and user key are secrets: set them only in Railway, never in the repository. Notifications queue with the bet and delivery failures retry on later engine cycles without affecting the paper bet.
+Optional variables are `PUSHOVER_DEVICE` to target one named device and `PUSHOVER_DASHBOARD_URL` to add an “Open Touchline” link. The API token and user key are secrets: set them only in Railway, never in the repository. Notifications queue with the bet and delivery failures retry on later engine cycles without affecting the paper bet. If the required entry odds, confirmed XIs, or active forecast are unavailable after the 30-minute cutoff, Touchline sends one separate alert naming the missing input.
 
 ```sh
 .pythonenv/bin/python -m pytest -q

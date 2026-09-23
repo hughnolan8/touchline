@@ -48,3 +48,24 @@ def test_pushover_failure_stays_queued_for_retry(monkeypatch):
     with connect() as c:
         notification = c.execute('SELECT status,attempts,last_error FROM bet_notifications').fetchone()
     assert dict(notification) == {'status': 'pending', 'attempts': 1, 'last_error': 'ConnectError'}
+
+
+def test_missing_fixture_data_notification_names_the_missing_inputs(monkeypatch):
+    match_id = _placed_bet()
+    with connect() as c:
+        c.execute('DELETE FROM bet_notifications WHERE bet_id IN (SELECT id FROM bets WHERE match_id=?)', (match_id,))
+        c.execute('DELETE FROM bets WHERE match_id=?', (match_id,))
+        notifications.queue_fixture_notification(c, match_id, ['initial complete verified 1X2 odds', 'confirmed starting XIs'])
+    monkeypatch.setenv('PUSHOVER_APP_TOKEN', 'app-token')
+    monkeypatch.setenv('PUSHOVER_USER_KEY', 'user-key')
+    sent = []
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(notifications.httpx, 'post', lambda *args, **kwargs: sent.append(kwargs['data']) or Response())
+    assert notifications.deliver_pending_fixture_notifications() == 1
+    assert sent[0]['title'] == 'Touchline bet not placed'
+    assert 'initial complete verified 1X2 odds' in sent[0]['message']
+    assert 'confirmed starting XIs' in sent[0]['message']
