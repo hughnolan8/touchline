@@ -1,6 +1,6 @@
 from backend.mobile import engine
 from backend.db import connect
-from backend.providers import ingest_match
+from backend.providers import ingest_match,add_quote
 
 
 def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):
@@ -50,7 +50,7 @@ def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monke
 def test_tick_only_places_a_bet_after_fotmob_confirms_the_lineup(monkeypatch):
     at = '2026-09-17T12:00:00+00:00'
     with connect() as connection:
-        ingest_match(connection, 'test', 'lineup-window', 'E0', 'Arsenal', 'Chelsea', '2026-09-17T12:30:00+00:00', True, 'scheduled', {})
+        fixture=ingest_match(connection, 'test', 'lineup-window', 'E0', 'Arsenal', 'Chelsea', '2026-09-17T12:58:00+00:00', True, 'scheduled', {})
     monkeypatch.setattr(engine, 'bootstrap', lambda value: False)
     monkeypatch.setattr(engine, 'train', lambda *args: 1)
     monkeypatch.setattr(engine, 'train_player', lambda *args: 2)
@@ -66,6 +66,9 @@ def test_tick_only_places_a_bet_after_fotmob_confirms_the_lineup(monkeypatch):
     class Odds:
         def refresh(self, fixtures, value):
             calls.append(('odds', fixtures, value))
+            with connect() as connection:
+                for selection,price in [('home',2.4),('draw',3.4),('away',3.2)]:
+                    add_quote(connection,fixture,'1x2',selection,None,'','Bet365',price,value,value,'test','https://example.test',True)
             return 1
         def close(self):
             pass
@@ -73,11 +76,12 @@ def test_tick_only_places_a_bet_after_fotmob_confirms_the_lineup(monkeypatch):
     monkeypatch.setattr(engine, 'FotMobLineups', Lineups)
     monkeypatch.setattr(engine, 'MobileOdds', Odds)
     monkeypatch.setattr(engine, 'forecast', lambda *args: {'model': 'Dixon-Coles + confirmed XI', 'probabilities': {}})
-    monkeypatch.setattr(engine, 'place_required_bet', lambda *args: 'placed')
+    monkeypatch.setattr(engine, 'place_required_bet', lambda *args,**kwargs: 'placed')
     result = engine.tick(at)
     assert result['lineups'] == 1
-    assert [call[0] for call in calls] == ['lineups', 'odds']
+    assert [call[0] for call in calls] == ['odds', 'lineups']
     with connect() as connection:
+        assert connection.execute('SELECT 1 FROM fixture_odds_snapshots WHERE match_id=?',(fixture,)).fetchone()
         assert connection.execute("SELECT 1 FROM settings WHERE key LIKE 'lineup-refreshed:%'").fetchone()
 
 

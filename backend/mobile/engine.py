@@ -1,7 +1,7 @@
 """One five-minute Premier League worker; no queue or trainer service."""
 import logging
 from backend.db import connect,now,setting,set_setting
-from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds
+from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
 from backend.understat import season_start,sync_epl_seasons
 from .provider import MobileOdds
@@ -55,6 +55,29 @@ def refresh_missing_odds(at=None):
   remaining=sum(not bool(best_market(c,m['id'])) for m in missing)
   set_setting(c,'last_missing_odds_refresh',at)
  return {'requested':len(missing),'fixtures':count,'still_missing':remaining}
+def _capture_lineups(fixtures,at):
+ if not fixtures:return []
+ lineups=FotMobLineups()
+ try:return lineups.refresh(fixtures,at)
+ finally:lineups.close()
+def _place_confirmed(fixtures,captured,at):
+ if not captured:return []
+ selected=[m for m in fixtures if m['id'] in captured]
+ with connect() as c:
+  train(c,at);train_player(c,at);results=[]
+  for m in selected:
+   snapshot=initial_snapshot(c,m['id'])
+   if not snapshot:
+    results.append('blocked: initial odds unavailable');continue
+   # Persist both forecasts for validation. The active version controls the
+   # paper decision while the other remains a shadow forecast.
+   baseline=forecast(c,m,at,BASELINE_VERSION);candidate=forecast(c,m,at,XI_VERSION)
+   active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
+   p=candidate if active==XI_VERSION else baseline
+   result=place_required_bet(c,m,p,at,entry_snapshot=snapshot) if p else 'blocked: active model unavailable'
+   set_setting(c,'lineup-refreshed:'+m['id'],{'at':at,'result':result})
+   results.append(result)
+ return results
 def tick(at=None):
  at=at or now();token=acquire('engine',seconds=290)
  if not token:return {'ok':True,'skipped':True}
@@ -63,46 +86,42 @@ def tick(at=None):
   # Results are refreshed every cycle only when an open fixture has finished/overdue.
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
   if open_bets:import_scores(at)
+  # The initial entry market is captured once in the 55-60 minute window.
+  # It remains the paper-bet price even if the confirmed XI arrives later.
   with connect() as c:
-   due=[m for m in matches(c,at=at) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'refreshed:'+m['id']) is None]
+   due=[m for m in matches(c,at=at) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'initial-odds-refreshed:'+m['id']) is None]
   if due:
    odds=MobileOdds()
    try:odds.refresh(due,at)
    finally:odds.close()
    with connect() as c:
-    train(c,at);train_player(c,at)
     for m in due:
-     # This early window is price/model preparation only.  A bet must wait for
-     # a confirmed XI and a later fresh price.
-     forecast(c,m,at,BASELINE_VERSION)
-     set_setting(c,'refreshed:'+m['id'],{'at':at,'result':'prepared'})
-  # FotMob typically publishes official XIs about 30 minutes before kickoff.
-  # Do not mark a fixture complete unless a valid 11-versus-11 snapshot was
-  # saved; a subsequent five-minute cycle can retry while the window remains.
+     snapshot=capture_initial_snapshot(c,m,at)
+     set_setting(c,'initial-odds-refreshed:'+m['id'],{'at':at,'result':'captured' if snapshot else 'no fresh complete market'})
+  # Poll for the XI at the entry window, then retry through the 30 minute
+  # cutoff. Prices are deliberately not refreshed during those retries.
   with connect() as c:
-   lineup_due=[m for m in matches(c,at=at) if 15<=seconds(m['kickoff'],at)/60<=30 and setting(c,'lineup-refreshed:'+m['id']) is None]
-  captured=[]
-  if lineup_due:
-   lineups=FotMobLineups()
-   try:captured=lineups.refresh(lineup_due,at)
-   finally:lineups.close()
-  if captured:
-   selected=[m for m in lineup_due if m['id'] in captured]
+   lineup_due=[m for m in matches(c,at=at) if initial_snapshot(c,m['id']) and setting(c,'lineup-refreshed:'+m['id']) is None and 30<=seconds(m['kickoff'],at)/60<=60]
+  captured=_capture_lineups(lineup_due,at)
+  _place_confirmed(lineup_due,captured,at)
+  # A final refresh in the last five minutes establishes the market close.
+  with connect() as c:
+   closing_due=[]
+   for m in matches(c,at=at):
+    if not 0<seconds(m['kickoff'],at)/60<=5:continue
+    bet=c.execute("SELECT id FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone()
+    if bet and not c.execute('SELECT 1 FROM bet_closing_lines WHERE bet_id=?',(bet['id'],)).fetchone():closing_due.append(m)
+  closed=0
+  if closing_due:
    odds=MobileOdds()
-   try:odds.refresh(selected,at)
+   try:odds.refresh(closing_due,at)
    finally:odds.close()
    with connect() as c:
-    train(c,at);train_player(c,at)
-    for m in selected:
-     # Persist both forecasts for validation.  The active version controls the
-     # paper decision, while the other remains a shadow forecast.
-     baseline=forecast(c,m,at,BASELINE_VERSION)
-     candidate=forecast(c,m,at,XI_VERSION)
-     active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
-     p=candidate if active==XI_VERSION else baseline
-     result=place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable'
-     set_setting(c,'lineup-refreshed:'+m['id'],{'at':at,'result':result})
+    for m in closing_due:
+     bet=dict(c.execute("SELECT * FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone())
+     if capture_closing_line(c,bet,at):
+      closed+=1;set_setting(c,'closing-refreshed:'+m['id'],{'at':at,'result':'captured'})
   settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)
-  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'settled':settled}
+  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'closed':closed,'settled':settled}
  finally:release('engine',token)

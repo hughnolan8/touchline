@@ -1,7 +1,7 @@
 from datetime import datetime,timedelta,timezone
 import json
 from backend.db import connect,now,dump
-from backend.engine import devig,account,discrepancies,matches,place_required_bet,settle
+from backend.engine import devig,account,discrepancies,matches,place_required_bet,settle,capture_initial_snapshot,capture_closing_line
 from backend.engine import forecast,train
 from backend.providers import ingest_match,add_quote
 
@@ -42,6 +42,22 @@ def test_discrepancies_use_consensus_and_best_execution_price():
   result=discrepancies(c,m,{'probabilities':{'home':.5,'draw':.25,'away':.25}},now())
  assert next(x for x in result if x['selection']=='home')['odds']==2.7
  assert all(x['market_probability']>0 for x in result)
+def test_initial_entry_price_and_closing_line_value_are_persisted():
+ mid,m=fixture()
+ with connect() as c:
+  at=now();snapshot=capture_initial_snapshot(c,m,at)
+  assert snapshot['selections']['home']['bookmaker']=='Bet365'
+  assert place_required_bet(c,m,{'probabilities':{'home':.6,'draw':.2,'away':.2}},at,entry_snapshot=snapshot)=='placed'
+  for selection,odds in [('home',2.0),('draw',3.0),('away',2.8)]:
+   add_quote(c,mid,'1x2',selection,None,'','Bet365',odds,now(),now(),'test','https://example.test',True)
+  for selection,odds in [('home',2.1),('draw',3.1),('away',2.9)]:
+   add_quote(c,mid,'1x2',selection,None,'','Sky Bet',odds,now(),now(),'test','https://example.test',True)
+  bet=dict(c.execute('SELECT * FROM bets WHERE match_id=?',(mid,)).fetchone())
+  assert capture_closing_line(c,bet,now()) is True
+  closing=c.execute('SELECT odds,bookmaker,clv FROM bet_closing_lines WHERE bet_id=?',(bet['id'],)).fetchone()
+  assert closing['odds']==2.1 and closing['bookmaker']=='Sky Bet'
+  assert closing['clv']>0
+  assert capture_closing_line(c,bet,now()) is False
 def test_forecast_uses_canonical_team_ids():
  mid,m=fixture()
  with connect() as c:

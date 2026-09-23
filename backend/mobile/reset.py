@@ -4,11 +4,11 @@ from backend.db import set_setting
 
 def reset_simulation_data(connection):
     """Delete football-derived data while retaining database configuration."""
-    for table in ('decisions', 'model_evaluations', 'bets', 'predictions', 'models', 'quotes', 'lineup_snapshots', 'player_match_stats', 'player_aliases',
+    for table in ('bet_closing_lines', 'decisions', 'model_evaluations', 'bets', 'predictions', 'models', 'fixture_odds_snapshots', 'quotes', 'lineup_snapshots', 'player_match_stats', 'player_aliases',
                   'players', 'observations', 'match_aliases', 'aliases', 'matches', 'teams', 'snapshots', 'sources', 'quarantine'):
         connection.execute(f'DELETE FROM {table}')
     connection.execute(
-        "DELETE FROM settings WHERE key IN ('bootstrap_complete', 'last_engine_success', 'last_manual_refresh', 'last_odds_refresh', 'odds_api_quota') OR key LIKE ? OR key LIKE ?",
-        ('refreshed:%', 'lineup-refreshed:%'),
+        "DELETE FROM settings WHERE key IN ('bootstrap_complete', 'last_engine_success', 'last_manual_refresh', 'last_odds_refresh', 'odds_api_quota') OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?",
+        ('refreshed:%', 'initial-odds-refreshed:%', 'lineup-refreshed:%', 'closing-refreshed:%'),
     )
     set_setting(connection, 'understat_cutover_complete', True)

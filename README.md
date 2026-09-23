@@ -4,7 +4,7 @@ Touchline is a Premier League-only paper-betting dashboard. It uses Premier Leag
 
 The virtual bankroll starts at £1,000. Predictions remain available for all future fixtures, but a paper bet is created only before kick-off on the fixture's UK calendar day, with a complete verified 1X2 market: fractional Kelly for positive value, or a £1 fallback on the least-negative outcome. No real-money bets are placed.
 
-Railway runs an API service and one five-minute engine worker. It refreshes odds in the 55–60 minute pre-kickoff window, then pulls FotMob's confirmed XI in the 25–30 minute window. A paper bet is allowed only after a complete confirmed XI has been stored and the player-adjusted forecast succeeds; it keeps polling overdue open bets for final scores. The authenticated dashboard includes a full Premier League refresh control for testing.
+Railway runs an API service and one five-minute engine worker. It captures the initial best UK 1X2 prices and polls FotMob for confirmed XIs in the 55–60 minute pre-kickoff window, retrying missing XIs through the 30-minute cutoff. A paper bet uses that fixed initial price after a complete confirmed XI and player-adjusted forecast succeed. The worker captures the best final market price in the last five minutes before kickoff and records closing-line value against the entry price; it keeps polling overdue open bets for final scores. The authenticated dashboard includes a full Premier League refresh control for testing.
 
 ```sh
 .pythonenv/bin/python -m pytest -q

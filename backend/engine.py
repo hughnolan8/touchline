@@ -93,12 +93,26 @@ def fresh_markets(c,mid,at=None,max_quote_age=15):
  return [g for g in groups.values() if devig(g) and min(q['quoted_at'] for q in g)>=cutoff]
 def best_market(c,mid,at=None,max_quote_age=15):
  books=fresh_markets(c,mid,at,max_quote_age);return max(books,key=lambda g:max(q['quoted_at'] for q in g)) if books else None
-def discrepancies(c,m,p,at=None,max_quote_age=15):
- books=fresh_markets(c,m['id'],at,max_quote_age)
- if not books:return []
+def market_snapshot(c,mid,at=None,max_quote_age=15):
+ books=fresh_markets(c,mid,at,max_quote_age)
+ if not books:return None
  probabilities={s:float(__import__('numpy').median([devig(book)[s] for book in books])) for s in ('home','draw','away')}
  best={s:max((q for book in books for q in book if q['selection']==s),key=lambda q:q['odds']) for s in ('home','draw','away')}
- return [dict(selection=s,probability=p['probabilities'][s],odds=best[s]['odds'],bookmaker=best[s]['bookmaker'],quote_time=best[s]['quoted_at'],implied_probability=1/best[s]['odds'],market_probability=probabilities[s],discrepancy=p['probabilities'][s]-probabilities[s],edge=p['probabilities'][s]*(best[s]['odds']-1)-(1-p['probabilities'][s]),quote_id=best[s]['id']) for s in ('home','draw','away')]
+ return {s:{'odds':best[s]['odds'],'bookmaker':best[s]['bookmaker'],'quote_time':best[s]['quoted_at'],'quote_id':best[s]['id'],'market_probability':probabilities[s]} for s in ('home','draw','away')}
+def capture_initial_snapshot(c,m,at=None):
+ at=at or now();market=market_snapshot(c,m['id'],at)
+ if not market:return None
+ c.execute('INSERT OR IGNORE INTO fixture_odds_snapshots(match_id,captured_at,payload) VALUES(?,?,?)',(m['id'],at,dump(market)))
+ row=c.execute('SELECT captured_at,payload FROM fixture_odds_snapshots WHERE match_id=?',(m['id'],)).fetchone()
+ return {'captured_at':row['captured_at'],'selections':json.loads(row['payload'])}
+def initial_snapshot(c,mid):
+ row=c.execute('SELECT captured_at,payload FROM fixture_odds_snapshots WHERE match_id=?',(mid,)).fetchone()
+ return {'captured_at':row['captured_at'],'selections':json.loads(row['payload'])} if row else None
+def snapshot_discrepancies(snapshot,p):
+ return [dict(selection=s,probability=p['probabilities'][s],odds=x['odds'],bookmaker=x['bookmaker'],quote_time=x['quote_time'],implied_probability=1/x['odds'],market_probability=x['market_probability'],discrepancy=p['probabilities'][s]-x['market_probability'],edge=p['probabilities'][s]*(x['odds']-1)-(1-p['probabilities'][s]),quote_id=x['quote_id']) for s,x in snapshot['selections'].items()]
+def discrepancies(c,m,p,at=None,max_quote_age=15):
+ market=market_snapshot(c,m['id'],at,max_quote_age)
+ return snapshot_discrepancies({'selections':market},p) if market else []
 def account(c):
  bs=rows(c,"SELECT * FROM bets WHERE portfolio='automatic' ORDER BY id DESC");settled=[b for b in bs if b['status'] not in ('open','review')];profit=sum(b['profit'] or 0 for b in settled);reserved=sum(b['stake'] for b in bs if b['status'] in ('open','review'));risked=[b for b in settled if b['status']!='void'];equity=STARTING_BANKROLL;curve=[{'date':'Start','equity':equity}];peak=equity;dd=0
  for b in sorted(settled,key=lambda x:x['settled_at'] or ''):equity+=b['profit'] or 0;peak=max(peak,equity);dd=max(dd,(peak-equity)/peak);curve.append({'date':b['settled_at'],'equity':round(equity,2)})
@@ -106,13 +120,13 @@ def account(c):
 def record_decision(c,m,p,decision,reason,at,choices=()):
  c.execute('INSERT OR IGNORE INTO decisions(match_id,prediction_id,created_at,model_version,decision,reason,snapshot) VALUES(?,?,?,?,?,?,?)',(m['id'],p.get('prediction_id'),at,p.get('model_version',BASELINE_VERSION),decision,reason,dump({'prediction':p,'choices':choices})))
  return f'{decision}: {reason}'
-def place_required_bet(c,m,p,at=None):
+def place_required_bet(c,m,p,at=None,entry_snapshot=None):
  at=at or now()
  if c.execute("SELECT 1 FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone():return 'already placed'
  if not is_bet_day(m['kickoff'],at):return 'blocked: fixture is not being played today'
  strategy=Strategy(**setting(c,'strategy',DEFAULT_STRATEGY))
  if not strategy.enabled:return record_decision(c,m,p,'no_bet','strategy disabled',at)
- choices=discrepancies(c,m,p,at,strategy.max_quote_age)
+ choices=snapshot_discrepancies(entry_snapshot,p) if entry_snapshot else discrepancies(c,m,p,at,strategy.max_quote_age)
  if not choices:return record_decision(c,m,p,'no_bet','no fresh complete verified 1X2 market',at)
  x=max(choices,key=lambda x:x['edge']);wallet=account(c)
  if x['edge'] <= 0 or x['edge'] < strategy.min_edge:return record_decision(c,m,p,'no_bet','edge below threshold',at,choices)
@@ -124,6 +138,16 @@ def place_required_bet(c,m,p,at=None):
  try:c.execute('INSERT INTO bets(portfolio,match_id,quote_id,prediction_id,created_at,stake,snapshot) VALUES(?,?,?,?,?,?,?)',('automatic',m['id'],x['quote_id'],p.get('prediction_id'),at,stake,dump(snap)))
  except sqlite3.IntegrityError:return 'already placed'
  return 'placed'
+def capture_closing_line(c,b,at=None):
+ """Attach the final available best-market line to one paper bet."""
+ at=at or now()
+ if c.execute('SELECT 1 FROM bet_closing_lines WHERE bet_id=?',(b['id'],)).fetchone():return False
+ market=market_snapshot(c,b['match_id'],at)
+ if not market:return False
+ selection=json.loads(b['snapshot'])['selection'];close=market[selection];entry=json.loads(b['snapshot'])['odds']
+ clv=1/close['odds']-1/entry
+ c.execute('INSERT OR IGNORE INTO bet_closing_lines(bet_id,quote_id,captured_at,odds,bookmaker,quoted_at,clv) VALUES(?,?,?,?,?,?,?)',(b['id'],close['quote_id'],at,close['odds'],close['bookmaker'],close['quote_time'],clv))
+ return True
 def settle(at=None):
  at=at or now();n=0
  with connect() as c:

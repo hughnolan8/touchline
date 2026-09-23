@@ -9,11 +9,19 @@ from fastapi.responses import FileResponse,JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from backend.db import connect,rows,now,setting
-from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds
+from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds,initial_snapshot,snapshot_discrepancies
 from .store import configure,initialize,acquire,release
 from .engine import refresh_all,refresh_missing_odds
 def serialize(b):
- s=json.loads(b['snapshot']);return {'id':b['id'],'home':b['home_name'],'away':b['away_name'],'competition':'Premier League','kickoff':b['kickoff'],'created_at':b['created_at'],'status':b['status'],'stake':b['stake'],'profit':b['profit'],'settled_at':b['settled_at'],'reason':b['reason'],'selection':s['selection'],'odds':s['odds'],'probability':s['probability'],'market_probability':s['market_probability'],'discrepancy':s['discrepancy'],'edge':s['edge'],'bookmaker':s['bookmaker']}
+ s=json.loads(b['snapshot']);closing=None
+ if b.get('closing_odds') is not None:
+  closing={'odds':b['closing_odds'],'bookmaker':b['closing_bookmaker'],'quote_time':b['closing_quote_time'],'captured_at':b['closing_captured_at'],'clv':b['closing_clv']}
+ return {'id':b['id'],'home':b['home_name'],'away':b['away_name'],'competition':'Premier League','kickoff':b['kickoff'],'created_at':b['created_at'],'status':b['status'],'stake':b['stake'],'profit':b['profit'],'settled_at':b['settled_at'],'reason':b['reason'],'selection':s['selection'],'odds':s['odds'],'probability':s['probability'],'market_probability':s['market_probability'],'discrepancy':s['discrepancy'],'edge':s['edge'],'bookmaker':s['bookmaker'],'entry_quote_time':s['quote_time'],'closing_line':closing}
+BET_QUERY="""SELECT b.*,h.name home_name,a.name away_name,m.kickoff,
+ cl.odds closing_odds,cl.bookmaker closing_bookmaker,cl.quoted_at closing_quote_time,
+ cl.captured_at closing_captured_at,cl.clv closing_clv
+ FROM bets b JOIN matches m ON m.id=b.match_id JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away
+ LEFT JOIN bet_closing_lines cl ON cl.bet_id=b.id WHERE b.portfolio='automatic'"""
 def engine_status(c):
  last=setting(c,'last_engine_success')
  start,end=fixture_window()
@@ -54,7 +62,7 @@ def create_app(setup=True):
  @app.get('/api/v1/summary')
  def summary():
   with connect() as c:
-   a=account(c);bs=rows(c,"SELECT b.*,h.name home_name,a.name away_name,m.kickoff FROM bets b JOIN matches m ON m.id=b.match_id JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away WHERE b.portfolio='automatic' ORDER BY b.id DESC LIMIT 5")
+   a=account(c);bs=rows(c,BET_QUERY+' ORDER BY b.id DESC LIMIT 5')
    return {'generated_at':now(),'mode':'paper','account':{k:v for k,v in a.items() if k!='bets'},'engine':engine_status(c),'recent':[serialize(b) for b in bs]}
  @app.get('/api/v1/predictions')
  def predictions():
@@ -67,12 +75,14 @@ def create_app(setup=True):
     xi=None
     if shadow:
      player=json.loads(shadow['payload']);features=json.loads(shadow['features'])['lineups'];xi={'status':'confirmed','captured_at':player['lineup_captured_at'],'home':{'adjustment':player['lineup_adjustment']['home'],'contributors':features['home']['starters']},'away':{'adjustment':player['lineup_adjustment']['away'],'contributors':features['away']['starters']}}
-    if p:answer.append({'id':m['id'],'home':m['home_name'],'away':m['away_name'],'competition':'Premier League','kickoff':m['kickoff'],'model':p['model'],'model_version':p.get('model_version'),'forecast_status':'ready','decision':dict(decision) if decision else None,'selections':discrepancies(c,m,p),'stats':{'home':{'xg':p['home_goals'],'form':recent_form(c,m['home'])},'away':{'xg':p['away_goals'],'form':recent_form(c,m['away'])},'xi':xi or {'status':'awaiting'}}})
+    if p:
+     entry=initial_snapshot(c,m['id'])
+     answer.append({'id':m['id'],'home':m['home_name'],'away':m['away_name'],'competition':'Premier League','kickoff':m['kickoff'],'model':p['model'],'model_version':p.get('model_version'),'forecast_status':'ready','decision':dict(decision) if decision else None,'selections':snapshot_discrepancies(entry,p) if entry else discrepancies(c,m,p),'initial_odds_captured_at':entry['captured_at'] if entry else None,'stats':{'home':{'xg':p['home_goals'],'form':recent_form(c,m['home'])},'away':{'xg':p['away_goals'],'form':recent_form(c,m['away'])},'xi':xi or {'status':'awaiting'}}})
    return answer
  @app.get('/api/v1/bets')
  def bets():
   with connect() as c:
-   bs=rows(c,"SELECT b.*,h.name home_name,a.name away_name,m.kickoff FROM bets b JOIN matches m ON m.id=b.match_id JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away WHERE b.portfolio='automatic' ORDER BY b.id DESC")
+   bs=rows(c,BET_QUERY+' ORDER BY b.id DESC')
    return {'items':[serialize(b) for b in bs]}
  @app.get('/api/v1/engine')
  def engine():
