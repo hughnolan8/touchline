@@ -12,7 +12,8 @@ The workflow uses no Railway or OpenAI credentials. It validates public
 behaviour but cannot identify the exact Railway deployment commit, inspect
 service logs, or perform recovery. For diagnosis, ask a Codex agent to inspect
 the public endpoints first; it must request approval before making any
-production change.
+production change. Its public API URL is an ordinary workflow environment
+value; update it there if the Railway domain changes.
 
 Deploy only `api` and `engine`; remove the former `trainer` service and its variables/jobs. Both services need `DATABASE_URL` and `TOUCHLINE_ODDS_API_KEY`. The dashboard is public and no longer uses an owner token. `MOBILE_ODDS_API_KEY` remains a temporary compatibility fallback while the Railway variable is renamed.
 

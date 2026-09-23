@@ -1,6 +1,7 @@
 """Read-only public production health check for GitHub Actions."""
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic, sleep
@@ -79,13 +80,14 @@ def report(ok, results, problems, last_success):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--base-url', default=os.environ.get('PRODUCTION_API_URL'))
     parser.add_argument('--config', type=Path, default=Path(__file__).resolve().parents[1] / 'data/runtime/railway.json')
     parser.add_argument('--timeout-seconds', type=int, default=600)
     parser.add_argument('--interval-seconds', type=int, default=60)
     args = parser.parse_args()
     if args.timeout_seconds < 0 or args.interval_seconds <= 0:
         parser.error('timeout must be non-negative and interval must be positive')
-    base_url = json.loads(args.config.read_text())['mobile_api_url'].rstrip('/')
+    base_url = (args.base_url or json.loads(args.config.read_text())['mobile_api_url']).rstrip('/')
     ok, results, problems, last_success = monitor(base_url, args.timeout_seconds, args.interval_seconds)
     print(report(ok, results, problems, last_success))
     return 0 if ok else 1

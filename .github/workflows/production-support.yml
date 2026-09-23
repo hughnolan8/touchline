@@ -20,4 +20,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Validate public production health
+        env:
+          PRODUCTION_API_URL: https://api-production-f10dd.up.railway.app
         run: python scripts/check-production.py --timeout-seconds 600 --interval-seconds 60 >> "$GITHUB_STEP_SUMMARY"

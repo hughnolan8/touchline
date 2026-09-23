@@ -8,6 +8,8 @@ It requires the API and engine health endpoints to return success, and requires
 the summary endpoint to report paper mode, a running engine, and a newly
 completed engine cycle. It has no Railway or OpenAI credentials, so it cannot
 confirm a deployment's commit, inspect Railway logs, or repair production.
+Update the public URL in the GitHub Actions workflow if the Railway domain
+changes.
 
 For an on-demand investigation, ask a Codex agent for production support. It
 will inspect public health first and may use local Railway status/log access
