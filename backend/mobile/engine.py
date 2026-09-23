@@ -6,6 +6,7 @@ from backend.playerstats import latest_lineup_snapshot
 from backend.understat import season_start,sync_epl_seasons
 from .provider import MobileOdds
 from .fotmob import FotMobLineups
+from .notifications import deliver_pending_bet_notifications
 from .store import acquire,release
 def import_scores(at=None):
  at=at or now()
@@ -40,7 +41,7 @@ def refresh_all(at=None):
    p=candidate if active==XI_VERSION else baseline
    placed.append(place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable')
   set_setting(c,'last_manual_refresh',at)
- result={'fixtures':count,'decisions':placed,'settled':settle(at)}
+ result={'fixtures':count,'decisions':placed,'notified':deliver_pending_bet_notifications(),'settled':settle(at)}
  logging.info('manual_refresh fixtures=%s decisions=%s settled=%s',count,len(placed),result['settled'])
  return result
 def refresh_missing_odds(at=None):
@@ -104,6 +105,7 @@ def tick(at=None):
    lineup_due=[m for m in matches(c,at=at) if initial_snapshot(c,m['id']) and setting(c,'lineup-refreshed:'+m['id']) is None and 30<=seconds(m['kickoff'],at)/60<=60]
   captured=_capture_lineups(lineup_due,at)
   _place_confirmed(lineup_due,captured,at)
+  notified=deliver_pending_bet_notifications()
   # A final refresh in the last five minutes establishes the market close.
   with connect() as c:
    closing_due=[]
@@ -123,5 +125,5 @@ def tick(at=None):
       closed+=1;set_setting(c,'closing-refreshed:'+m['id'],{'at':at,'result':'captured'})
   settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)
-  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'closed':closed,'settled':settled}
+  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'notified':notified,'closed':closed,'settled':settled}
  finally:release('engine',token)

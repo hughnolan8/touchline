@@ -135,7 +135,9 @@ def place_required_bet(c,m,p,at=None,entry_snapshot=None):
  stake=max(strategy.min_stake,stake);stake=min(stake,math.floor(min(wallet['available'],wallet['balance']*strategy.max_bet_fraction,wallet['balance']*strategy.max_exposure-wallet['reserved'])*100)/100)
  if stake<strategy.min_stake:return record_decision(c,m,p,'no_bet','bankroll unavailable',at,choices)
  snap={**x,'model':p.get('model','Dixon-Coles'),'model_version':p.get('model_version',BASELINE_VERSION),'staking':{'mode':strategy.stake_mode,'bankroll':wallet['balance'],'full_kelly':k}}
- try:c.execute('INSERT INTO bets(portfolio,match_id,quote_id,prediction_id,created_at,stake,snapshot) VALUES(?,?,?,?,?,?,?)',('automatic',m['id'],x['quote_id'],p.get('prediction_id'),at,stake,dump(snap)))
+ try:
+  inserted=c.execute('INSERT INTO bets(portfolio,match_id,quote_id,prediction_id,created_at,stake,snapshot) VALUES(?,?,?,?,?,?,?)',('automatic',m['id'],x['quote_id'],p.get('prediction_id'),at,stake,dump(snap)))
+  c.execute('INSERT OR IGNORE INTO bet_notifications(bet_id) VALUES(?)',(inserted.lastrowid,))
  except sqlite3.IntegrityError:return 'already placed'
  return 'placed'
 def capture_closing_line(c,b,at=None):

@@ -6,6 +6,17 @@ The virtual bankroll starts at £1,000. Predictions remain available for all fut
 
 Railway runs an API service and one five-minute engine worker. It captures the initial best UK 1X2 prices and polls FotMob for confirmed XIs in the 55–60 minute pre-kickoff window, retrying missing XIs through the 30-minute cutoff. A paper bet uses that fixed initial price after a complete confirmed XI and player-adjusted forecast succeed. The worker captures the best final market price in the last five minutes before kickoff and records closing-line value against the entry price; it keeps polling overdue open bets for final scores. The authenticated dashboard includes a full Premier League refresh control for testing.
 
+## Pushover bet notifications
+
+Touchline can send an optional phone notification after it records a paper bet. Install Pushover, create a Pushover application, then add these variables to the Railway **engine** service:
+
+```text
+PUSHOVER_APP_TOKEN=<application API token>
+PUSHOVER_USER_KEY=<your Pushover user key>
+```
+
+Optional variables are `PUSHOVER_DEVICE` to target one named device and `PUSHOVER_DASHBOARD_URL` to add an “Open Touchline” link. The API token and user key are secrets: set them only in Railway, never in the repository. Notifications queue with the bet and delivery failures retry on later engine cycles without affecting the paper bet.
+
 ```sh
 .pythonenv/bin/python -m pytest -q
 ```
