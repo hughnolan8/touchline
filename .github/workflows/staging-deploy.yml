@@ -6,7 +6,8 @@ on:
     types: [completed]
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: shared-staging
@@ -35,3 +36,10 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
         run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service engine
+  validate:
+    needs: deploy
+    uses: ./.github/workflows/staging-support.yml
+    with:
+      sha: ${{ github.event.workflow_run.head_sha }}
+      branch: ${{ github.event.workflow_run.head_branch }}
+    secrets: inherit

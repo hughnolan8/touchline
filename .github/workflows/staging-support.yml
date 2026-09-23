@@ -1,8 +1,14 @@
 name: Staging release validation
 
 on:
-  deployment_status:
-    states: [success]
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,15 +20,12 @@ concurrency:
 
 jobs:
   validate:
-    if: >-
-      github.event.deployment.environment == 'staging' &&
-      github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
     environment: staging
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.deployment.sha }}
+          ref: ${{ inputs.sha }}
       - name: Validate public staging health
         env:
           DEPLOYMENT_API_URL: ${{ vars.STAGING_API_URL }}
@@ -51,9 +54,9 @@ jobs:
       - name: Create PR and enable auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOYMENT_REF: ${{ github.event.deployment.ref }}
+          DEPLOYMENT_BRANCH: ${{ inputs.branch }}
         run: |
-          branch="${DEPLOYMENT_REF#refs/heads/}"
+          branch="$DEPLOYMENT_BRANCH"
           case "$branch" in feature/*|fix/*|codex/*) ;; *) exit 0 ;; esac
           pr=$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url')
           if [ -z "$pr" ]; then
