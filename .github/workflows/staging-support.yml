@@ -13,6 +13,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
 
 concurrency:
   group: shared-staging-validation
@@ -51,7 +52,18 @@ jobs:
           name: staging-railway-diagnostics
           path: ${{ runner.temp }}/railway
           if-no-files-found: ignore
+      - name: Report validation status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          state=success
+          if [ "$OUTCOME" != success ]; then state=failure; fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state="$state" -f context=validate -f description="Staging validation $state"
       - name: Create PR and enable auto-merge
+        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOYMENT_BRANCH: ${{ inputs.branch }}

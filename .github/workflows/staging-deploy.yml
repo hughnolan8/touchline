@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
 
 concurrency:
   group: shared-staging
@@ -43,3 +44,13 @@ jobs:
       sha: ${{ github.event.workflow_run.head_sha }}
       branch: ${{ github.event.workflow_run.head_branch }}
     secrets: inherit
+  report-deploy-failure:
+    needs: deploy
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report failed staging deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=failure -f context=validate -f description='Staging deployment failed'
