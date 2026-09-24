@@ -30,12 +30,25 @@ BET_QUERY="""SELECT b.*,h.name home_name,a.name away_name,m.kickoff,m.competitio
 def _league(value):
  if value is not None and value not in BY_CODE:raise HTTPException(422,'Unsupported league')
  return value
+def league_status(c,competition,start,end):
+ completed=c.execute("SELECT COUNT(*),MAX(kickoff) FROM matches WHERE competition=? AND status='finished'",(competition.code,)).fetchone()
+ model=c.execute('SELECT cutoff,samples FROM models WHERE competition=? ORDER BY id DESC LIMIT 1',(competition.code,)).fetchone()
+ upcoming=c.execute("SELECT COUNT(*) FROM matches WHERE competition=? AND status='scheduled' AND kickoff>? AND kickoff<=?",(competition.code,start,end)).fetchone()[0]
+ quoted=c.execute("SELECT COUNT(*) FROM (SELECT m.id FROM matches m JOIN quotes q ON q.match_id=m.id WHERE m.competition=? AND m.status='scheduled' AND m.kickoff>? AND m.kickoff<=? AND q.market='1x2' AND q.verified=1 GROUP BY m.id,q.bookmaker HAVING COUNT(DISTINCT q.selection)=3) AS complete_markets",(competition.code,start,end)).fetchone()[0]
+ latest=completed[1];cutoff=model[0] if model else None
+ model_status='current' if model and (not latest or cutoff>=latest) else 'stale' if model else 'missing'
+ missing=[]
+ if completed[0]<40:missing.append(f'{40-completed[0]} more completed result{("s" if 40-completed[0]!=1 else "")} needed to train')
+ elif not model:missing.append('trained model missing')
+ elif model_status=='stale':missing.append('new completed results need retraining')
+ if upcoming>quoted:missing.append(f'{upcoming-quoted} upcoming fixture{("s" if upcoming-quoted!=1 else "")} missing verified 1X2 odds')
+ return {'code':competition.code,'name':competition.name,'model':{'status':model_status,'updated_at':cutoff,'samples':model[1] if model else 0},'data':{'completed_matches':completed[0],'upcoming_fixtures':upcoming,'verified_1x2_markets':quoted},'missing':missing}
 def engine_status(c,league=None):
  league=_league(league);where=' AND competition=?' if league else '';args=(league,) if league else ()
  last=setting(c,'last_engine_success')
  start,end=fixture_window()
  counts={'completed_matches':c.execute(f"SELECT COUNT(*) FROM matches WHERE status='finished'{where}",args).fetchone()[0],'trained_models':c.execute(f"SELECT COUNT(*) FROM models WHERE 1=1{where}",args).fetchone()[0],'upcoming_fixtures':c.execute(f"SELECT COUNT(*) FROM matches WHERE status='scheduled' AND kickoff>? AND kickoff<=?{where}",(start,end,*args)).fetchone()[0],'verified_1x2_quotes':c.execute(f"SELECT COUNT(*) FROM quotes q JOIN matches m ON m.id=q.match_id WHERE m.kickoff>? AND m.kickoff<=? AND q.market='1x2' AND q.verified=1{where}",(start,end,*args)).fetchone()[0]}
- return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':odds_api_configured() and setting(c,'odds_api_engine_configured') is True,'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'leagues':[{'code':x.code,'name':x.name} for x in COMPETITIONS],'selected_league':league,'data':counts}
+ return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':odds_api_configured() and setting(c,'odds_api_engine_configured') is True,'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'leagues':[league_status(c,x,start,end) for x in COMPETITIONS],'selected_league':league,'data':counts}
 def recent_form(c,team_id,league):
  games=rows(c,"SELECT home,away,stats FROM matches WHERE competition=? AND status='finished' AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5",(league,team_id,team_id));form=[]
  for game in games:
