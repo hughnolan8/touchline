@@ -19,6 +19,11 @@ engine coverage while keeping the selected league in the URL;
 bankroll and exposure remain shared. See the root README for per-league
 backtesting and promotion commands.
 
+The Engine tab lists all five leagues, even when the dashboard is filtered. A
+model is up to date when its training cutoff includes the latest completed
+result for that league. It calls out insufficient results, a missing or stale
+model, and any upcoming fixture without a complete verified 1X2 market.
+
 Historical fixtures are committed incrementally before any optional roster
 fetch, so a long provider response cannot delay API startup during a deploy.
 The deployment refresh endpoint acknowledges a reserved engine cycle promptly;
