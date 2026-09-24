@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.db import connect,rows,now,setting
 from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds,initial_snapshot,snapshot_discrepancies
 from backend.competitions import COMPETITIONS, BY_CODE, name
+from backend.understat import season_start
 from .store import configure,initialize,acquire,release
 from .engine import refresh_all,refresh_missing_odds,tick
 from .engine import refresh_all,refresh_missing_odds
@@ -30,12 +31,16 @@ BET_QUERY="""SELECT b.*,h.name home_name,a.name away_name,m.kickoff,m.competitio
 def _league(value):
  if value is not None and value not in BY_CODE:raise HTTPException(422,'Unsupported league')
  return value
+def engine_data(c,league,start,end):
+ return {'completed_matches':c.execute("SELECT COUNT(*) FROM matches WHERE status='finished' AND competition=?",(league,)).fetchone()[0],'trained_models':c.execute("SELECT COUNT(*) FROM models WHERE competition=?",(league,)).fetchone()[0],'upcoming_fixtures':c.execute("SELECT COUNT(*) FROM matches WHERE status='scheduled' AND kickoff>? AND kickoff<=? AND competition=?",(start,end,league)).fetchone()[0],'verified_1x2_quotes':c.execute("SELECT COUNT(*) FROM quotes q JOIN matches m ON m.id=q.match_id WHERE m.kickoff>? AND m.kickoff<=? AND q.market='1x2' AND q.verified=1 AND m.competition=?",(start,end,league)).fetchone()[0]}
 def engine_status(c,league=None):
- league=_league(league);where=' AND competition=?' if league else '';args=(league,) if league else ()
- last=setting(c,'last_engine_success')
- start,end=fixture_window()
- counts={'completed_matches':c.execute(f"SELECT COUNT(*) FROM matches WHERE status='finished'{where}",args).fetchone()[0],'trained_models':c.execute(f"SELECT COUNT(*) FROM models WHERE 1=1{where}",args).fetchone()[0],'upcoming_fixtures':c.execute(f"SELECT COUNT(*) FROM matches WHERE status='scheduled' AND kickoff>? AND kickoff<=?{where}",(start,end,*args)).fetchone()[0],'verified_1x2_quotes':c.execute(f"SELECT COUNT(*) FROM quotes q JOIN matches m ON m.id=q.match_id WHERE m.kickoff>? AND m.kickoff<=? AND q.market='1x2' AND q.verified=1{where}",(start,end,*args)).fetchone()[0]}
- return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':odds_api_configured() and setting(c,'odds_api_engine_configured') is True,'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'leagues':[{'code':x.code,'name':x.name} for x in COMPETITIONS],'selected_league':league,'data':counts}
+ league=_league(league);last=setting(c,'last_engine_success');start,end=fixture_window();seasons=list(range(season_start()-3,season_start()+1))
+ progress=[]
+ for competition in COMPETITIONS:
+  completed=setting(c,f'bootstrap_seasons:{competition.code}',[]);pending=[year for year in seasons if year not in completed]
+  progress.append({'code':competition.code,'name':competition.name,'data':engine_data(c,competition.code,start,end),'bootstrap':{'completed_seasons':completed,'pending_seasons':pending,'complete':not pending}})
+ data=engine_data(c,league,start,end) if league else {key:sum(item['data'][key] for item in progress) for key in progress[0]['data']}
+ return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':odds_api_configured() and setting(c,'odds_api_engine_configured') is True,'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'leagues':[{'code':x.code,'name':x.name} for x in COMPETITIONS],'selected_league':league,'data':data,'progress':progress}
 def recent_form(c,team_id,league):
  games=rows(c,"SELECT home,away,stats FROM matches WHERE competition=? AND status='finished' AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5",(league,team_id,team_id));form=[]
  for game in games:
@@ -67,7 +72,9 @@ def create_app(setup=True):
  def health():return {'ok':True,'leagues':[{'code':x.code,'name':x.name} for x in COMPETITIONS],'mode':'paper'}
  @app.get('/health/engine')
  def health_engine():
-  with connect() as c:return JSONResponse({'ok':engine_status(c)['status']=='running'},200 if engine_status(c)['status']=='running' else 503)
+  with connect() as c:
+   status=engine_status(c)['status']
+   return JSONResponse({'ok':status=='running'},200 if status=='running' else 503)
  @app.get('/api/v1/summary')
  def summary(league:str|None=None):
   league=_league(league)

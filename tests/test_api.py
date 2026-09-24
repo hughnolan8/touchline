@@ -14,7 +14,10 @@ def test_public_api_returns_empty_paper_state_without_provider_or_database_setup
         assert summary['mode'] == 'paper'
         assert summary['recent'] == []
         assert summary['account']['balance'] == 1000.0
-        assert client.get('/api/v1/engine').json()['status'] == 'overdue'
+        engine = client.get('/api/v1/engine').json()
+        assert engine['status'] == 'overdue'
+        assert [league['code'] for league in engine['progress']] == ['E0', 'SP1', 'D1', 'I1', 'F1']
+        assert engine['progress'][0]['bootstrap']['pending_seasons']
         assert client.get('/health/engine').status_code == 503
         assert client.get('/api/v1/predictions?league=SP1').json() == []
         assert client.get('/api/v1/predictions?league=unknown').status_code == 422
