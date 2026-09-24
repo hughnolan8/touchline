@@ -36,7 +36,7 @@ def _match_fields(match):
     )
 
 
-def sync_seasons(connection, league, seasons, client_factory=UnderstatClient, observed=None):
+def sync_seasons(connection, league, seasons, client_factory=UnderstatClient, observed=None, include_rosters=True):
     """Import one supported league's Understat fixtures for season start-years.
 
     The league endpoint supplies both upcoming fixtures and completed results.
@@ -74,7 +74,7 @@ def sync_seasons(connection, league, seasons, client_factory=UnderstatClient, ob
                     # Rosters are only requested for finalised matches and only
                     # until a successful player-stat import exists.  They label
                     # historical XIs; never infer an upcoming lineup from them.
-                    if status == 'finished' and not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
+                    if include_rosters and status == 'finished' and not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
                         try:
                             save_roster(connection, match_id, client.match(match=str(source_id)).get_roster_data(timeout=REQUEST_TIMEOUT))
                         except Exception as error:  # Provider outages must not block scores.
@@ -117,6 +117,27 @@ def import_results(connection, league, seasons, client_factory=UnderstatClient):
                         except Exception as error:
                             quarantine(connection, SOURCE, f'Roster import failed: {error}', {'match_id': source_id})
                     imported += 1
+    return imported
+
+
+def backfill_rosters(connection, limit=10, client_factory=UnderstatClient):
+    """Hydrate a small, committed batch of historical XIs after score import."""
+    pending = connection.execute("""SELECT m.id,m.source_id FROM matches m
+        WHERE m.source=? AND m.status='finished' AND NOT EXISTS
+        (SELECT 1 FROM player_match_stats p WHERE p.match_id=m.id)
+        ORDER BY m.kickoff DESC LIMIT ?""", (SOURCE, limit)).fetchall()
+    connection.commit()
+    imported = 0
+    with client_factory() as client:
+        for match in pending:
+            try:
+                source_id = str(match['source_id']).split(':', 1)[-1]
+                save_roster(connection, match['id'], client.match(match=source_id).get_roster_data(timeout=REQUEST_TIMEOUT))
+                imported += 1
+            except Exception as error:
+                quarantine(connection, SOURCE, f'Roster import failed: {error}', {'match_id': match['source_id']})
+            finally:
+                connection.commit()
     return imported
 
 

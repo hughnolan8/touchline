@@ -22,3 +22,6 @@ Historical fixtures are committed incrementally before any optional roster
 fetch, so a long provider response cannot delay API startup during a deploy.
 The deployment refresh endpoint acknowledges a reserved engine cycle promptly;
 the cycle then runs in the background and health checks wait for its result.
+Initial multi-league history is imported one competition-season result batch per
+engine cycle; roster hydration stays out of that bootstrap path so startup and
+health checks remain bounded.

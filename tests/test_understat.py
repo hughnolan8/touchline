@@ -1,5 +1,5 @@
 from backend.db import connect
-from backend.understat import import_epl_results, sync_epl_seasons
+from backend.understat import import_epl_results, sync_epl_seasons, sync_seasons
 
 
 class FakeLeague:
@@ -46,6 +46,11 @@ def test_sync_epl_seasons_imports_results_and_scheduled_fixtures():
         {'source': 'understat', 'source_id': 'E0:2', 'status': 'scheduled', 'stats': '{}', 'kickoff': '2024-08-20T14:00:00+00:00'},
     ]
     assert {tuple(alias) for alias in aliases} == {('understat', 'Arsenal'), ('understat', 'Chelsea'), ('understat', 'Everton'), ('understat', 'Liverpool')}
+
+
+def test_bootstrap_score_import_skips_per_match_roster_requests():
+    with connect() as connection:
+        assert sync_seasons(connection, 'E0', [2024], client_factory=FakeClient, observed='2024-08-18T00:00:00+00:00', include_rosters=False) == 2
 
 
 class MalformedLeague:

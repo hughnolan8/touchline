@@ -23,20 +23,19 @@ def test_initialize_renames_legacy_app_state():
 def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):
     calls = []
 
-    def sync(connection, league, seasons):
+    def sync(connection, league, seasons, **_):
         calls.append((league, list(seasons)))
         return 0
 
     monkeypatch.setattr(engine, 'sync_seasons', sync)
-    assert engine.bootstrap('2026-09-17T12:00:00+00:00') is True
-    assert calls == [(league, [2023, 2024, 2025, 2026]) for league in ('E0', 'SP1', 'D1', 'I1', 'F1')]
-    assert engine.bootstrap('2026-09-17T12:00:00+00:00') is False
+    assert engine.bootstrap('2026-09-17T12:00:00+00:00') == {'league': 'E0', 'season': 2023}
+    assert calls == [('E0', [2023])]
 
 
 def test_current_season_refresh_uses_understat(monkeypatch):
     calls = []
 
-    def sync(connection, league, seasons):
+    def sync(connection, league, seasons, **_):
         calls.append((league, list(seasons)))
         return 42
 

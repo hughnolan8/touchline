@@ -3,7 +3,7 @@ import logging
 from backend.db import connect,now,setting,set_setting
 from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
-from backend.understat import season_start,sync_seasons
+from backend.understat import backfill_rosters,season_start,sync_seasons
 from backend.competitions import COMPETITIONS
 from .provider import MobileOdds,odds_api_configured
 from .fotmob import FotMobLineups
@@ -12,19 +12,22 @@ from .store import acquire,release
 def import_scores(at=None):
  at=at or now()
  with connect() as c:
-  count=sum(sync_seasons(c,league.code,[season_start(at)]) for league in COMPETITIONS)
+  count=sum(sync_seasons(c,league.code,[season_start(at)],include_rosters=False) for league in COMPETITIONS)
  logging.info('understat_refresh records=%s',count)
  return count
 def bootstrap(at=None):
  at=at or now()
- with connect() as c:
-  if all(setting(c,f'bootstrap_complete:{league.code}') for league in COMPETITIONS):return False
- year=season_start(at)
+ year=season_start(at);seasons=range(year-3,year+1)
  with connect() as c:
   for league in COMPETITIONS:
-   if not setting(c,f'bootstrap_complete:{league.code}'):
-    sync_seasons(c,league.code,range(year-3,year+1));set_setting(c,f'bootstrap_complete:{league.code}',at)
- return True
+   done=setting(c,f'bootstrap_seasons:{league.code}',[])
+   next_season=next((season for season in seasons if season not in done),None)
+   if next_season is None:continue
+   sync_seasons(c,league.code,[next_season],include_rosters=False)
+   set_setting(c,f'bootstrap_seasons:{league.code}',[*done,next_season])
+   if next_season==year:set_setting(c,f'bootstrap_complete:{league.code}',at)
+   return {'league':league.code,'season':next_season}
+ return False
 def refresh_all(at=None):
  at=at or now();bootstrap(at);import_scores(at)
  with connect() as c:
@@ -93,7 +96,12 @@ def tick(at=None,token=None):
  if not token:return {'ok':True,'skipped':True}
  try:
   with connect() as c:set_setting(c,'odds_api_engine_configured',odds_api_configured())
-  bootstrap(at)
+  bootstrapping=bootstrap(at)
+  if bootstrapping:
+   with connect() as c:
+    train(c,at,bootstrapping['league']);set_setting(c,'last_engine_success',at)
+   return {'ok':True,'bootstrapping':bootstrapping}
+  with connect() as c:backfill_rosters(c)
   # Results are refreshed every cycle only when an open fixture has finished/overdue.
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
   if open_bets:import_scores(at)
