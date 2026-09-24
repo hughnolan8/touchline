@@ -42,8 +42,8 @@ def test_sync_epl_seasons_imports_results_and_scheduled_fixtures():
         matches = connection.execute('SELECT source,source_id,status,stats,kickoff FROM matches ORDER BY source_id').fetchall()
         aliases = connection.execute('SELECT source,name FROM aliases ORDER BY name').fetchall()
     assert [dict(match) for match in matches] == [
-        {'source': 'understat', 'source_id': '1', 'status': 'finished', 'stats': '{"hg":2,"ag":1}', 'kickoff': '2024-08-16T19:00:00+00:00'},
-        {'source': 'understat', 'source_id': '2', 'status': 'scheduled', 'stats': '{}', 'kickoff': '2024-08-20T14:00:00+00:00'},
+        {'source': 'understat', 'source_id': 'E0:1', 'status': 'finished', 'stats': '{"hg":2,"ag":1}', 'kickoff': '2024-08-16T19:00:00+00:00'},
+        {'source': 'understat', 'source_id': 'E0:2', 'status': 'scheduled', 'stats': '{}', 'kickoff': '2024-08-20T14:00:00+00:00'},
     ]
     assert {tuple(alias) for alias in aliases} == {('understat', 'Arsenal'), ('understat', 'Chelsea'), ('understat', 'Everton'), ('understat', 'Liverpool')}
 

@@ -1,4 +1,4 @@
-"""Premier League forecasts, discrepancies, and paper ledger."""
+"""Competition-scoped forecasts, discrepancies, and shared paper ledger."""
 import json,math,os,sqlite3
 from datetime import datetime,timedelta
 from zoneinfo import ZoneInfo
@@ -6,59 +6,63 @@ from .db import DEFAULT_STRATEGY,connect,rows,now,dump,setting,set_setting
 from .models import BASELINE_VERSION,XI_VERSION,fit_dixon_coles,predict_1x2
 from .playerstats import historical_lineups, latest_lineup_snapshot, lineup_features
 from .app.strategy import Strategy
-LEAGUE='E0';STARTING_BANKROLL=1000.;KELLY_FRACTION=.25;MAX_BET_FRACTION=.02;MIN_FALLBACK_STAKE=1.
+from .competitions import competition
+STARTING_BANKROLL=1000.;KELLY_FRACTION=.25;MAX_BET_FRACTION=.02;MIN_FALLBACK_STAKE=1.
 def seconds(a,b):return (datetime.fromisoformat(a)-datetime.fromisoformat(b)).total_seconds()
 def is_bet_day(kickoff,at):
  """Only wager before kick-off on the fixture's UK calendar day."""
  london=ZoneInfo('Europe/London');kickoff=datetime.fromisoformat(kickoff).astimezone(london);at=datetime.fromisoformat(at).astimezone(london)
  return at.date()==kickoff.date() and at<kickoff
-def history(c,cutoff):
+def history(c,cutoff,league='E0'):
  r=[]
- for x in rows(c,"SELECT id,home,away,kickoff,stats FROM matches WHERE competition='E0' AND status='finished' AND kickoff<? ORDER BY kickoff",(cutoff,)):
+ for x in rows(c,"SELECT id,home,away,kickoff,stats FROM matches WHERE competition=? AND status='finished' AND kickoff<? ORDER BY kickoff",(league,cutoff)):
   s=json.loads(x.pop('stats'))
   if s.get('hg') is not None and s.get('ag') is not None:r.append({**x,'stats':s})
  return r
-def train(c,at=None):
- at=at or now();r=history(c,at)
+def train(c,at=None,league='E0'):
+ competition(league);at=at or now();r=history(c,at,league)
  if len(r)<40:return None
  p=fit_dixon_coles(r,at,version=BASELINE_VERSION)
  if not p:return None
  return c.execute(
   'INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES(?,?,?,?,?,?)',
-  (LEAGUE, at, at, len(r), dump(p), dump({'method':'time-decayed Dixon-Coles','version':BASELINE_VERSION,'diagnostics':p['diagnostics']})),
+  (league, at, at, len(r), dump(p), dump({'method':'time-decayed Dixon-Coles','version':BASELINE_VERSION,'diagnostics':p['diagnostics']})),
  ).lastrowid
-def train_player(c,at=None):
- at=at or now(); records=history(c,at); features={}
+def train_player(c,at=None,league='E0'):
+ competition(league);at=at or now(); records=history(c,at,league); features={}
  for record in records:
-  value=historical_lineups(c,record['id'],record['kickoff'])
+  value=historical_lineups(c,record['id'],record['kickoff'],league)
   if value:features[record['id']]=value
  records=[r for r in records if r['id'] in features]
  if len(records)<40:return None
- model=fit_dixon_coles(records,at,features,version=XI_VERSION,config=setting(c,'xi_model_config'))
+ model=fit_dixon_coles(records,at,features,version=XI_VERSION,config=setting(c,f'xi_model_config:{league}'))
  if not model:return None
  return c.execute(
   'INSERT INTO models(competition,created_at,cutoff,samples,payload,metrics) VALUES(?,?,?,?,?,?)',
-  (LEAGUE, at, at, len(records), dump(model), dump({'method':'Dixon-Coles + confirmed XI','version':XI_VERSION,'coverage':len(records),'diagnostics':model['diagnostics']})),
+  (league, at, at, len(records), dump(model), dump({'method':'Dixon-Coles + confirmed XI','version':XI_VERSION,'coverage':len(records),'diagnostics':model['diagnostics']})),
  ).lastrowid
-def current_model(c):
- x=c.execute("SELECT * FROM models WHERE competition='E0' AND (metrics LIKE ? OR metrics NOT LIKE ?) ORDER BY id DESC LIMIT 1",('%baseline-v1%','%confirmed XI%')).fetchone();return dict(x) if x else None
-def current_player_model(c):
- x=c.execute("SELECT * FROM models WHERE competition='E0' AND (metrics LIKE ? OR metrics LIKE ?) ORDER BY id DESC LIMIT 1",('%xi-v2%','%confirmed XI%')).fetchone();return dict(x) if x else None
+def current_model(c,league='E0'):
+ x=c.execute("SELECT * FROM models WHERE competition=? AND (metrics LIKE ? OR metrics NOT LIKE ?) ORDER BY id DESC LIMIT 1",(league,'%baseline-v1%','%confirmed XI%')).fetchone();return dict(x) if x else None
+def current_player_model(c,league='E0'):
+ x=c.execute("SELECT * FROM models WHERE competition=? AND (metrics LIKE ? OR metrics LIKE ?) ORDER BY id DESC LIMIT 1",(league,'%xi-v2%','%confirmed XI%')).fetchone();return dict(x) if x else None
 FIXTURE_WINDOW=timedelta(days=7)
 def fixture_window(at=None):
  at=at or now();return at,(datetime.fromisoformat(at)+FIXTURE_WINDOW).isoformat()
-def matches(c,upcoming=True,at=None):
- q="SELECT m.*,h.name home_name,a.name away_name FROM matches m JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away WHERE m.competition='E0'"
+def matches(c,upcoming=True,at=None,league=None):
+ q="SELECT m.*,h.name home_name,a.name away_name FROM matches m JOIN teams h ON h.id=m.home JOIN teams a ON a.id=m.away WHERE 1=1";args=[]
+ if league:competition(league);q+=' AND m.competition=?';args.append(league)
  if not upcoming:return rows(c,q+' ORDER BY m.kickoff')
  start,end=fixture_window(at)
- return rows(c,q+" AND m.status='scheduled' AND m.kickoff>? AND m.kickoff<=? ORDER BY m.kickoff",(start,end))
+ return rows(c,q+" AND m.status='scheduled' AND m.kickoff>? AND m.kickoff<=? ORDER BY m.kickoff",(*args,start,end))
 def _save_prediction(c,m,model,at,p,features):
  c.execute('INSERT OR IGNORE INTO predictions(match_id,model_id,created_at,kickoff,payload,features) VALUES(?,?,?,?,?,?)',(m['id'],model['id'],at,m['kickoff'],dump(p),dump(features)))
  row=c.execute('SELECT id FROM predictions WHERE match_id=? AND model_id=? AND kickoff=? AND features=?',(m['id'],model['id'],m['kickoff'],dump(features))).fetchone()
  return row[0] if row else None
+def strategy_for(c,league):
+ return setting(c,f'strategy:{league}',setting(c,'strategy',DEFAULT_STRATEGY) if league=='E0' else DEFAULT_STRATEGY)
 def forecast(c,m,at=None,version=None):
  at=at or now()
- version=version or setting(c,'strategy',DEFAULT_STRATEGY)['active_model']
+ league=m['competition'];version=version or strategy_for(c,league)['active_model']
  # A confirmed XI is a first-class input to the production forecast.  The
  # baseline remains available when no XI was captured before prediction time.
  snapshot=latest_lineup_snapshot(c,m['id'],at)
@@ -66,16 +70,16 @@ def forecast(c,m,at=None,version=None):
   player=forecast_player(c,m,snapshot['lineups'],snapshot['captured_at'],at)
   if player:return player
  if version != BASELINE_VERSION:return None
- model=current_model(c)
+ model=current_model(c,league)
  if not model:return None
  # Models are trained against stable canonical team IDs, not display labels.
  p=predict_1x2(json.loads(model['payload']),m['home'],m['away'])
  if not p:return None
  p={**p,'model':'Dixon-Coles','model_version':BASELINE_VERSION};p['prediction_id']=_save_prediction(c,m,model,at,p,{}) ;return p
 def forecast_player(c,m,lineups,captured_at,at=None):
- at=at or now(); model=current_player_model(c)
+ at=at or now(); model=current_player_model(c,m['competition'])
  if not model:return None
- features={side:lineup_features(c,m['id'],side,lineups[side],m['kickoff']) for side in ('home','away')}
+ features={side:lineup_features(c,m['id'],side,lineups[side],m['kickoff'],m['competition']) for side in ('home','away')}
  if not all(features.values()):return None
  prediction=predict_1x2(json.loads(model['payload']),m['home'],m['away'],features)
  if not prediction:return None
@@ -124,7 +128,7 @@ def place_required_bet(c,m,p,at=None,entry_snapshot=None):
  at=at or now()
  if c.execute("SELECT 1 FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone():return 'already placed'
  if not is_bet_day(m['kickoff'],at):return 'blocked: fixture is not being played today'
- strategy=Strategy(**setting(c,'strategy',DEFAULT_STRATEGY))
+ strategy=Strategy(**strategy_for(c,m['competition']))
  if not strategy.enabled:return record_decision(c,m,p,'no_bet','strategy disabled',at)
  choices=snapshot_discrepancies(entry_snapshot,p) if entry_snapshot else discrepancies(c,m,p,at,strategy.max_quote_age)
  if not choices:return record_decision(c,m,p,'no_bet','no fresh complete verified 1X2 market',at)

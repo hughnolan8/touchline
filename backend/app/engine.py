@@ -1,9 +1,10 @@
-"""One five-minute Premier League worker; no queue or trainer service."""
+"""One five-minute worker for every supported league; no queue or trainer service."""
 import logging
 from backend.db import connect,now,setting,set_setting
 from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
-from backend.understat import season_start,sync_epl_seasons
+from backend.understat import season_start,sync_seasons
+from backend.competitions import COMPETITIONS
 from .provider import MobileOdds,odds_api_configured
 from .fotmob import FotMobLineups
 from .notifications import deliver_pending_bet_notifications,deliver_pending_fixture_notifications,queue_fixture_notification
@@ -11,21 +12,24 @@ from .store import acquire,release
 def import_scores(at=None):
  at=at or now()
  with connect() as c:
-  count=sync_epl_seasons(c,[season_start(at)])
+  count=sum(sync_seasons(c,league.code,[season_start(at)]) for league in COMPETITIONS)
  logging.info('understat_refresh records=%s',count)
  return count
 def bootstrap(at=None):
  at=at or now()
  with connect() as c:
-  if setting(c,'bootstrap_complete'):return False
+  if all(setting(c,f'bootstrap_complete:{league.code}') for league in COMPETITIONS):return False
  year=season_start(at)
  with connect() as c:
-  sync_epl_seasons(c,range(year-3,year+1))
- with connect() as c:set_setting(c,'bootstrap_complete',at)
+  for league in COMPETITIONS:
+   if not setting(c,f'bootstrap_complete:{league.code}'):
+    sync_seasons(c,league.code,range(year-3,year+1));set_setting(c,f'bootstrap_complete:{league.code}',at)
  return True
 def refresh_all(at=None):
  at=at or now();bootstrap(at);import_scores(at)
- with connect() as c:train(c,at);train_player(c,at);upcoming=matches(c,at=at)
+ with connect() as c:
+  upcoming=matches(c,at=at)
+  for league in COMPETITIONS:train(c,at,league.code);train_player(c,at,league.code)
  odds=MobileOdds()
  try:count=odds.refresh(upcoming,at)
  finally:odds.close()
@@ -37,7 +41,7 @@ def refresh_all(at=None):
     placed.append('blocked: confirmed lineup unavailable');continue
    baseline=forecast(c,m,at,BASELINE_VERSION)
    candidate=forecast(c,m,at,XI_VERSION)
-   active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
+   active=setting(c,f'strategy:{m["competition"]}',setting(c,'strategy',{})).get('active_model',BASELINE_VERSION)
    p=candidate if active==XI_VERSION else baseline
    placed.append(place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable')
   set_setting(c,'last_manual_refresh',at)
@@ -65,7 +69,8 @@ def _place_confirmed(fixtures,captured,at):
  if not captured:return []
  selected=[m for m in fixtures if m['id'] in captured]
  with connect() as c:
-  train(c,at);train_player(c,at);results=[]
+  for league in {m['competition'] for m in selected}:train(c,at,league);train_player(c,at,league)
+  results=[]
   for m in selected:
    snapshot=initial_snapshot(c,m['id'])
    if not snapshot:
@@ -75,7 +80,7 @@ def _place_confirmed(fixtures,captured,at):
    # Persist both forecasts for validation. The active version controls the
    # paper decision while the other remains a shadow forecast.
    baseline=forecast(c,m,at,BASELINE_VERSION);candidate=forecast(c,m,at,XI_VERSION)
-   active=setting(c,'strategy',{}).get('active_model',BASELINE_VERSION)
+   active=setting(c,f'strategy:{m["competition"]}',setting(c,'strategy',{})).get('active_model',BASELINE_VERSION)
    p=candidate if active==XI_VERSION else baseline
    result=place_required_bet(c,m,p,at,entry_snapshot=snapshot) if p else 'blocked: active model unavailable'
    if result == 'blocked: active model unavailable':

@@ -4,8 +4,9 @@ import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from backend.db import connect, init, now, setting, set_setting
+from backend.competitions import BY_CODE
 
-LEAGUES = ('E0',)
+LEAGUES = tuple(BY_CODE)
 DATA_DEFAULTS = dict(version=1)
 
 

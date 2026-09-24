@@ -23,26 +23,26 @@ def test_initialize_renames_legacy_app_state():
 def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):
     calls = []
 
-    def sync(connection, seasons):
-        calls.append(list(seasons))
+    def sync(connection, league, seasons):
+        calls.append((league, list(seasons)))
         return 0
 
-    monkeypatch.setattr(engine, 'sync_epl_seasons', sync)
+    monkeypatch.setattr(engine, 'sync_seasons', sync)
     assert engine.bootstrap('2026-09-17T12:00:00+00:00') is True
-    assert calls == [[2023, 2024, 2025, 2026]]
+    assert calls == [(league, [2023, 2024, 2025, 2026]) for league in ('E0', 'SP1', 'D1', 'I1', 'F1')]
     assert engine.bootstrap('2026-09-17T12:00:00+00:00') is False
 
 
 def test_current_season_refresh_uses_understat(monkeypatch):
     calls = []
 
-    def sync(connection, seasons):
-        calls.append(list(seasons))
+    def sync(connection, league, seasons):
+        calls.append((league, list(seasons)))
         return 42
 
-    monkeypatch.setattr(engine, 'sync_epl_seasons', sync)
-    assert engine.import_scores('2026-02-01T12:00:00+00:00') == 42
-    assert calls == [[2025]]
+    monkeypatch.setattr(engine, 'sync_seasons', sync)
+    assert engine.import_scores('2026-02-01T12:00:00+00:00') == 210
+    assert calls == [(league, [2025]) for league in ('E0', 'SP1', 'D1', 'I1', 'F1')]
 
 
 def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monkeypatch):
