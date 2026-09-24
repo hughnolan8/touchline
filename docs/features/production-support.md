@@ -9,8 +9,9 @@ The optional token is made available to the job as an environment variable so
 the log and artifact steps can be skipped safely when it is absent.
 
 It requires the API and engine health endpoints to return success, and requires
-the summary endpoint to report paper mode, a running engine, and a newly
-completed engine cycle. It cannot repair production.
+the summary endpoint to report paper mode, a running engine, a newly completed
+engine cycle, and an Odds API key configured in both running processes. It
+cannot repair production.
 Update the public URL in the GitHub Actions workflow if the Railway domain
 changes.
 

@@ -10,6 +10,14 @@ from backend.providers import canonical
 from .store import transaction
 
 
+def odds_api_key():
+ return os.environ.get('TOUCHLINE_ODDS_API_KEY') or os.environ.get('MOBILE_ODDS_API_KEY')
+
+
+def odds_api_configured():
+ return bool(odds_api_key())
+
+
 def reserve_request(at):
  cap=os.environ.get('TOUCHLINE_ODDS_MAX_REQUESTS_PER_UTC_DAY')
  if cap is None:return
@@ -33,8 +41,8 @@ class MobileOdds:
    return response.json(),response
   except (httpx.HTTPError,ValueError):raise OddsApiError('Odds API request failed') from None
  def refresh(self,fixtures,at=None):
-  key=os.environ.get('TOUCHLINE_ODDS_API_KEY') or os.environ.get('MOBILE_ODDS_API_KEY')
-  if not key:raise OddsApiError('TOUCHLINE_ODDS_API_KEY is not configured')
+  key=odds_api_key()
+  if not odds_api_configured():raise OddsApiError('TOUCHLINE_ODDS_API_KEY is not configured')
   at=at or now();base={'apiKey':key,'dateFormat':'iso'}
   events,response=self._get('/events',base,at)
   wanted=[]

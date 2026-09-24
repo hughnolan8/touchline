@@ -4,7 +4,7 @@ from backend.db import connect,now,setting,set_setting
 from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
 from backend.understat import season_start,sync_epl_seasons
-from .provider import MobileOdds
+from .provider import MobileOdds,odds_api_configured
 from .fotmob import FotMobLineups
 from .notifications import deliver_pending_bet_notifications,deliver_pending_fixture_notifications,queue_fixture_notification
 from .store import acquire,release
@@ -87,6 +87,7 @@ def tick(at=None):
  at=at or now();token=acquire('engine',seconds=290)
  if not token:return {'ok':True,'skipped':True}
  try:
+  with connect() as c:set_setting(c,'odds_api_engine_configured',odds_api_configured())
   bootstrap(at)
   # Results are refreshed every cycle only when an open fixture has finished/overdue.
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
