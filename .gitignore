@@ -12,6 +12,7 @@
 /work/
 __pycache__/
 .pytest_cache/
+.coverage
 /ios/build/
 **/xcuserdata/
 *.xcuserstate
