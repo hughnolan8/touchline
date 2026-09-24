@@ -17,3 +17,6 @@ safe default until an operator promotes the XI model explicitly for that
 league. The dashboard selector filters fixtures, bets, and engine coverage;
 bankroll and exposure remain shared. See the root README for per-league
 backtesting and promotion commands.
+
+Historical fixtures are committed incrementally before any optional roster
+fetch, so a long provider response cannot delay API startup during a deploy.

@@ -66,6 +66,10 @@ def sync_seasons(connection, league, seasons, client_factory=UnderstatClient, ob
                 except (KeyError, TypeError, ValueError) as error:
                     quarantine(connection, SOURCE, str(error), match)
                     continue
+                finally:
+                    # Never keep database locks while fetching a roster. A full
+                    # five-league bootstrap can otherwise delay API startup.
+                    connection.commit()
                 if match_id:
                     # Rosters are only requested for finalised matches and only
                     # until a successful player-stat import exists.  They label
@@ -103,6 +107,9 @@ def import_results(connection, league, seasons, client_factory=UnderstatClient):
                 except (KeyError, TypeError, ValueError) as error:
                     quarantine(connection, SOURCE, str(error), match)
                     continue
+                finally:
+                    # Roster retrieval is remote I/O; persist this fixture first.
+                    connection.commit()
                 if match_id:
                     if not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
                         try:
