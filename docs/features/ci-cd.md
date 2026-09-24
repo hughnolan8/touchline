@@ -69,6 +69,8 @@ approval mandatory.
 ## Release and rollback
 
 1. A release branch passes Quality, including tests and documentation checks.
+   Its documentation check compares the complete branch delta with `main`, so
+   syncing `main` into the branch does not hide an earlier guide update.
 2. The staging deploy workflow uploads that exact commit to staging `api` and
    `engine`. Newer release work cancels the older staging run.
 3. The API and engine deploy in parallel. After both Railway CLI deployments
