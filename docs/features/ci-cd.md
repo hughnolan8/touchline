@@ -54,7 +54,11 @@ Create protected GitHub environments named `staging` and `production`. In each
 environment, store a Railway project token as `RAILWAY_TOKEN`; tokens must be
 scoped to the matching Railway environment. Set repository or environment
 variables `RAILWAY_PROJECT_ID` and `STAGING_API_URL` (the latter only needs to
-exist for staging). Never commit tokens or database URLs.
+exist for staging). Generate a random `DEPLOYMENT_REFRESH_TOKEN`, store it as
+the `TOUCHLINE_DEPLOY_REFRESH_TOKEN` variable on the staging API service and
+as the `DEPLOYMENT_REFRESH_TOKEN` secret in the GitHub `staging` environment.
+It authorizes the post-deploy engine cycle; do not configure it in production.
+Never commit tokens or database URLs.
 
 Enable Codex's connected GitHub pull-request review. Protect `main`: require
 the GitHub Actions `test` and `validate` job checks, one Codex approval, no
@@ -64,16 +68,19 @@ approval mandatory.
 
 ## Release and rollback
 
-1. A release branch passes Quality, including tests and documentation checks.
-   Its documentation check compares the complete branch delta with `main`, so
-   syncing `main` into the branch does not hide an earlier guide update.
-2. The staging deploy workflow uploads that exact commit to staging `api` and
-   `engine`. Newer release work cancels the older staging run.
+1. Opening or updating a same-repository release PR runs Quality in the
+   staging workflow before it can deploy. Quality includes tests and
+   documentation checks; its documentation check compares the complete branch
+   delta with `main`, so syncing `main` into the branch does not hide an
+   earlier guide update. Fork PRs never receive staging credentials.
+2. After Quality passes, the staging deploy workflow uploads that exact PR
+   commit to staging `api` and `engine`. Newer release work cancels the older
+   staging run.
 3. The API and engine deploy in parallel. After both Railway CLI deployments
-   succeed, the workflow starts one engine cycle over Railway SSH, then calls
-   staging validation with that commit and branch. It waits for healthy public
-   API/engine/summary responses and the requested cycle to finish, then fails
-   on structured application failures and traceback signatures in Railway logs.
+   succeed, staging validation requests one engine cycle through the
+   token-protected API, then waits for healthy public API/engine/summary
+   responses and the requested cycle to finish. It fails on structured
+   application failures and traceback signatures in Railway logs.
    It writes the resulting `validate` status to the tested commit, and failed
    diagnostics are retained as a workflow artifact.
 4. A passing release creates or updates its PR, requests Codex review, and
