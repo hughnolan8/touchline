@@ -49,6 +49,8 @@ def check(base_url, started_at, request=fetch):
         problems.append('Summary is unavailable or not in paper mode')
     if status != 'running':
         problems.append('Engine summary status is not running')
+    if not isinstance(engine_summary, dict) or engine_summary.get('configured') is not True:
+        problems.append('Odds API key is not configured in every process')
     if last_success is None or last_success <= started_at:
         problems.append('Engine has not completed a fresh cycle')
     return results, problems, last_success

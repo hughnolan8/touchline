@@ -13,7 +13,7 @@ START = datetime(2026, 9, 23, 12, tzinfo=timezone.utc)
 
 def responder(summary=None, api=(200, {'ok': True}), engine=(200, {'ok': True}), errors=None):
     if summary is None:
-        summary = {'mode': 'paper', 'engine': {'status': 'running', 'last_success': (START + timedelta(seconds=1)).isoformat()}}
+        summary = {'mode': 'paper', 'engine': {'status': 'running', 'last_success': (START + timedelta(seconds=1)).isoformat(), 'configured': True}}
     responses = {'/health': api, '/health/engine': engine, '/api/v1/summary': (200, summary)}
     errors = errors or {}
     def request(url):
@@ -37,6 +37,12 @@ def test_check_rejects_an_unhealthy_engine_endpoint():
     assert 'Engine health check is unhealthy' in problems
 
 
+def test_check_rejects_a_missing_odds_key_in_either_process():
+    summary = {'mode': 'paper', 'engine': {'status': 'running', 'last_success': (START + timedelta(seconds=1)).isoformat(), 'configured': False}}
+    _, problems, _ = production_check.check('https://touchline.test', START, responder(summary=summary))
+    assert 'Odds API key is not configured in every process' in problems
+
+
 def test_check_rejects_malformed_summary_response():
     _, problems, _ = production_check.check('https://touchline.test', START, responder(summary=[]))
     assert 'Summary is unavailable or not in paper mode' in problems
@@ -44,7 +50,7 @@ def test_check_rejects_malformed_summary_response():
 
 
 def test_monitor_times_out_when_the_engine_success_does_not_advance():
-    request = responder(summary={'mode': 'paper', 'engine': {'status': 'running', 'last_success': START.isoformat()}})
+    request = responder(summary={'mode': 'paper', 'engine': {'status': 'running', 'last_success': START.isoformat(), 'configured': True}})
     ticks = iter((0, 0, 1, 1))
     ok, _, problems, _ = production_check.monitor('https://touchline.test', 1, 1, request, clock=lambda: START, wait=lambda _: None, timer=lambda: next(ticks))
     assert ok is False

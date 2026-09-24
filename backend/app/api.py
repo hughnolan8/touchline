@@ -1,5 +1,5 @@
 """Public Premier League paper simulation API."""
-import json,os
+import json
 from contextlib import asynccontextmanager
 from threading import Lock
 from pathlib import Path
@@ -12,6 +12,7 @@ from backend.db import connect,rows,now,setting
 from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds,initial_snapshot,snapshot_discrepancies
 from .store import configure,initialize,acquire,release
 from .engine import refresh_all,refresh_missing_odds
+from .provider import odds_api_configured
 def serialize(b):
  s=json.loads(b['snapshot']);closing=None
  if b.get('closing_odds') is not None:
@@ -26,7 +27,7 @@ def engine_status(c):
  last=setting(c,'last_engine_success')
  start,end=fixture_window()
  counts={'completed_matches':c.execute("SELECT COUNT(*) FROM matches WHERE competition='E0' AND status='finished'").fetchone()[0],'trained_models':c.execute("SELECT COUNT(*) FROM models WHERE competition='E0'").fetchone()[0],'upcoming_fixtures':c.execute("SELECT COUNT(*) FROM matches WHERE competition='E0' AND status='scheduled' AND kickoff>? AND kickoff<=?",(start,end)).fetchone()[0],'verified_1x2_quotes':c.execute("SELECT COUNT(*) FROM quotes q JOIN matches m ON m.id=q.match_id WHERE m.competition='E0' AND m.kickoff>? AND m.kickoff<=? AND q.market='1x2' AND q.verified=1",(start,end)).fetchone()[0]}
- return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':bool(os.environ.get('TOUCHLINE_ODDS_API_KEY') or os.environ.get('MOBILE_ODDS_API_KEY')),'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'league':'Premier League','data':counts}
+ return {'status':'running' if last and 0<=seconds(now(),last)<=900 else 'overdue','last_success':last,'configured':odds_api_configured() and setting(c,'odds_api_engine_configured') is True,'quota':setting(c,'odds_api_quota',{}),'last_manual_refresh':setting(c,'last_manual_refresh'),'league':'Premier League','data':counts}
 def recent_form(c,team_id):
  games=rows(c,"SELECT home,away,stats FROM matches WHERE competition='E0' AND status='finished' AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5",(team_id,team_id));form=[]
  for game in games:
