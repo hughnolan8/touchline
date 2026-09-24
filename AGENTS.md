@@ -14,10 +14,14 @@ Before committing a code change:
 1. Run the relevant checks (normally `.pythonenv/bin/python -m pytest -q`).
 2. Update the matching `docs/features/` page; update `README.md` when setup or
    user-facing behaviour changes.
-3. Confirm `git status --short` and stage only files belonging to the change.
-4. Work on a dedicated `codex/<brief-name>` branch, never directly on `main`,
+3. Fetch `origin/main` and simulate its merge with the task branch using
+   `git merge-tree --write-tree HEAD origin/main`. If Git reports conflicts,
+   rebase onto `origin/main`, resolve the conflicts locally, and rerun the
+   relevant checks before staging.
+4. Confirm `git status --short` and stage only files belonging to the change.
+5. Work on a dedicated `codex/<brief-name>` branch, never directly on `main`,
    and create one focused commit.
-5. Push the branch with `git push -u origin HEAD`, then create its pull request
+6. Push the branch with `git push -u origin HEAD`, then create its pull request
    with `gh pr create --base main --fill` (or confirm the branch already has an
    open PR). A code task is not complete until it has an open PR; do not merge
    the PR or push directly to `main` unless the user explicitly asks.
@@ -34,7 +38,13 @@ For concurrent coding tasks, work only in the task's assigned Git worktree and
 branch. Do not use the primary checkout for an isolated task, commit directly
 to `main`, or merge another task's branch. Give each task a dedicated branch
 using the `codex/` prefix; leave branch integration to the user or a designated
-integration task.
+integration task. Before work starts, assign each task exclusive files or a
+vertical slice; agree shared API, schema, type, and configuration changes
+first. The integration task owns cross-cutting files such as shared routes,
+dependency manifests, migrations, and release configuration. Avoid unrelated
+formatting or refactoring while parallel work is active. Re-run the merge
+simulation before push or whenever `origin/main` advances; resolve any detected
+conflicts in the task branch locally.
 
 ## Documentation
 

@@ -20,11 +20,34 @@ or dependencies.
    with the change; do not add a percentage gate until the suite has a stable
    baseline.
 
-3. Review `git status --short`, stage only the completed change, then make one
+3. Fetch `origin/main` and simulate its merge with the task branch:
+
+   ```sh
+   git fetch origin main
+   git merge-tree --write-tree HEAD origin/main
+   ```
+
+   A non-zero result means the branches would conflict. Rebase onto
+   `origin/main`, resolve the conflict in the task branch, and rerun the
+   relevant checks before staging. Repeat this simulation before pushing and
+   whenever `origin/main` advances.
+
+4. Review `git status --short`, stage only the completed change, then make one
    focused commit on a `codex/**` task branch. Push it with `git push -u origin
    HEAD` and run `gh pr create --base main --fill` unless the branch already
    has an open pull request. Staging validates the pull request before it can
    merge to `main`; agents do not merge it themselves.
+
+## Parallel work
+
+Give every concurrent task its own worktree and `codex/**` branch. Before work
+starts, divide the work into exclusive files or vertical slices, and agree any
+shared API, schema, type, or configuration changes. Assign one integration task
+to cross-cutting files such as shared routes, dependency manifests, migrations,
+and release configuration. Keep commits focused and avoid unrelated formatting
+or refactoring while parallel work is active. If the merge simulation finds a
+conflict, resolve it locally in the task branch rather than leaving it for
+integration.
 
 Use `scripts/install-git-hooks.sh` once per clone to enable the local safety
 net. The pre-commit hook requires a Markdown update in `README.md` or `docs/`
