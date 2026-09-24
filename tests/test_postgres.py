@@ -19,11 +19,15 @@ def test_cursor_returns_inserted_ids_and_row_supports_numeric_indexing():
         def fetchone(self):
             return {'id': 7, 'name': 'Arsenal'}
 
+        def fetchall(self):
+            return [{'id': 8, 'name': 'Chelsea'}]
+
     raw = RawCursor()
     cursor = postgres.Cursor(raw).execute('INSERT INTO bets(portfolio) VALUES(?)', ('automatic',))
     assert cursor.lastrowid == 7
     assert 'RETURNING id' in raw.statement
     assert postgres.Row({'id': 7, 'name': 'Arsenal'})[0] == 7
+    assert cursor.fetchall() == [{'id': 8, 'name': 'Chelsea'}]
 
 
 def test_connect_commits_on_success_and_rolls_back_on_error(monkeypatch):

@@ -53,6 +53,9 @@ class Cursor:
         row = self.cursor.fetchone()
         return Row(row) if row else None
 
+    def fetchall(self):
+        return [Row(row) for row in self.cursor.fetchall()]
+
     def __iter__(self):
         for row in self.cursor:
             yield Row(row)
