@@ -61,10 +61,27 @@ It authorizes the post-deploy engine cycle; do not configure it in production.
 Never commit tokens or database URLs.
 
 Enable Codex's connected GitHub pull-request review. Protect `main`: require
-the GitHub Actions `test` and `validate` job checks, one Codex approval, no
-unresolved conversations, and no force pushes. Enable squash auto-merge. Open
-one test release PR to verify the exact Codex review identity before making its
-approval mandatory.
+the GitHub Actions `test` and `validate / validate` check contexts, one Codex
+approval, no unresolved conversations, and no force pushes. Enable squash
+auto-merge. Open one test release PR to verify the exact Codex review identity
+before making its approval mandatory.
+
+### Changing required workflows
+
+`MainProtect` requires the exact check contexts `test` and `validate /
+validate`. When changing the workflow that supplies either context:
+
+1. Keep the existing required context passing and add the replacement check as
+   non-required in the same PR.
+2. Verify the replacement on release PRs, then have a repository administrator
+   add it to `MainProtect`.
+3. Remove the old context from `MainProtect` only after the replacement is
+   required and passing; delete or rename its workflow in a final PR.
+
+For an emergency repair where a required check cannot pass, an administrator
+may temporarily remove only that context from `MainProtect`, merge the narrow
+repair, and immediately restore it. There are no bypass actors configured, so
+this ruleset edit is the only emergency path.
 
 ## Release and rollback
 
