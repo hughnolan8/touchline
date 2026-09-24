@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from threading import Lock
 from pathlib import Path
 import psycopg
-from fastapi import FastAPI,HTTPException,Header
+from fastapi import BackgroundTasks,FastAPI,HTTPException,Header
 from fastapi.responses import FileResponse,JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -112,10 +112,11 @@ def create_app(setup=True):
   try:return refresh_missing_odds()
   finally:release('missing-odds-refresh',token)
  @app.post('/api/v1/refresh-engine')
- def refresh_engine_endpoint(x_deployment_refresh_token:str|None=Header(default=None)):
+ def refresh_engine_endpoint(background_tasks:BackgroundTasks,x_deployment_refresh_token:str|None=Header(default=None)):
   token=os.environ.get('TOUCHLINE_DEPLOY_REFRESH_TOKEN')
   if not token or not x_deployment_refresh_token or not hmac.compare_digest(token,x_deployment_refresh_token):raise HTTPException(404)
-  result=tick()
-  if result.get('skipped'):raise HTTPException(409,'An engine refresh is already running')
-  return result
+  lease=acquire('engine',seconds=900)
+  if not lease:raise HTTPException(409,'An engine refresh is already running')
+  background_tasks.add_task(tick,token=lease)
+  return {'ok':True,'started':True}
  return app

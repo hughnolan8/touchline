@@ -88,8 +88,8 @@ def _place_confirmed(fixtures,captured,at):
    set_setting(c,'lineup-refreshed:'+m['id'],{'at':at,'result':result})
    results.append(result)
  return results
-def tick(at=None):
- at=at or now();token=acquire('engine',seconds=290)
+def tick(at=None,token=None):
+ at=at or now();token=token or acquire('engine',seconds=290)
  if not token:return {'ok':True,'skipped':True}
  try:
   with connect() as c:set_setting(c,'odds_api_engine_configured',odds_api_configured())

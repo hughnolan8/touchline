@@ -124,17 +124,18 @@ def test_early_odds_window_only_prepares_forecasts(monkeypatch):
 
 
 def test_engine_refresh_endpoint_requires_the_deployment_token(monkeypatch):
-    monkeypatch.setattr(api, 'tick', lambda: {'ok': True, 'refreshed': 0})
+    monkeypatch.setattr(api, 'acquire', lambda *_, **__: 'lease')
+    monkeypatch.setattr(api, 'tick', lambda **_: {'ok': True, 'refreshed': 0})
     monkeypatch.setenv('TOUCHLINE_DEPLOY_REFRESH_TOKEN', 'test-token')
     with TestClient(api.create_app(setup=False)) as client:
         assert client.post('/api/v1/refresh-engine').status_code == 404
         response = client.post('/api/v1/refresh-engine', headers={'X-Deployment-Refresh-Token': 'test-token'})
     assert response.status_code == 200
-    assert response.json() == {'ok': True, 'refreshed': 0}
+    assert response.json() == {'ok': True, 'started': True}
 
 
 def test_engine_refresh_endpoint_waits_for_the_running_cycle(monkeypatch):
-    monkeypatch.setattr(api, 'tick', lambda: {'ok': True, 'skipped': True})
+    monkeypatch.setattr(api, 'acquire', lambda *_, **__: None)
     monkeypatch.setenv('TOUCHLINE_DEPLOY_REFRESH_TOKEN', 'test-token')
     with TestClient(api.create_app(setup=False)) as client:
         response = client.post('/api/v1/refresh-engine', headers={'X-Deployment-Refresh-Token': 'test-token'})

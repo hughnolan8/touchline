@@ -20,3 +20,5 @@ backtesting and promotion commands.
 
 Historical fixtures are committed incrementally before any optional roster
 fetch, so a long provider response cannot delay API startup during a deploy.
+The deployment refresh endpoint acknowledges a reserved engine cycle promptly;
+the cycle then runs in the background and health checks wait for its result.
