@@ -1,9 +1,9 @@
 name: Staging deploy
 
 on:
-  workflow_run:
-    workflows: [Quality]
-    types: [completed]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
@@ -15,12 +15,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+    with:
+      documentation_range: origin/main...${{ github.event.pull_request.head.sha }}
   deploy:
+    needs: quality
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      (startsWith(github.event.workflow_run.head_branch, 'feature/') ||
-       startsWith(github.event.workflow_run.head_branch, 'fix/') ||
-       startsWith(github.event.workflow_run.head_branch, 'codex/'))
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (startsWith(github.event.pull_request.head.ref, 'feature/') ||
+       startsWith(github.event.pull_request.head.ref, 'fix/') ||
+       startsWith(github.event.pull_request.head.ref, 'codex/'))
     runs-on: ubuntu-latest
     environment: staging
     strategy:
@@ -29,36 +34,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Deploy ${{ matrix.service }} to shared staging
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
         run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "${{ matrix.service }}"
-  start-engine:
-    needs: deploy
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - name: Start a staging engine cycle
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: npx --yes @railway/cli@latest ssh --project "$RAILWAY_PROJECT_ID" --environment staging --service engine -- python -m backend.runner --once
   validate:
-    needs: start-engine
+    needs: deploy
     uses: ./.github/workflows/staging-support.yml
     with:
-      sha: ${{ github.event.workflow_run.head_sha }}
-      branch: ${{ github.event.workflow_run.head_branch }}
+      sha: ${{ github.event.pull_request.head.sha }}
+      branch: ${{ github.event.pull_request.head.ref }}
     secrets: inherit
   report-deploy-failure:
-    needs: [deploy, start-engine]
+    needs: deploy
     if: ${{ failure() }}
     runs-on: ubuntu-latest
     steps:
       - name: Report failed staging deployment
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          SHA: ${{ github.event.pull_request.head.sha }}
         run: gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=failure -f context=validate -f description='Staging deployment failed'
