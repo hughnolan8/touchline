@@ -1,4 +1,4 @@
-"""Walk-forward evaluation for the Premier League Dixon--Coles forecaster.
+"""Walk-forward evaluation for a competition-scoped Dixon--Coles forecaster.
 
 This deliberately evaluates probabilities against completed scores only.  It
 does not use odds, stakes, or any future result when fitting a forecast.
@@ -26,14 +26,14 @@ def outcome(stats):
     return 'draw'
 
 
-def completed_matches(connection):
-    """Load only usable Premier League results, in their chronological order."""
+def completed_matches(connection, league='E0'):
+    """Load only usable league results, in their chronological order."""
     rows = connection.execute("""
         SELECT id, home, away, kickoff, stats
         FROM matches
-        WHERE competition='E0' AND status='finished'
+        WHERE competition=? AND status='finished'
         ORDER BY kickoff, id
-    """).fetchall()
+    """, (league,)).fetchall()
     matches = []
     for row in rows:
         match = dict(row)
@@ -43,13 +43,13 @@ def completed_matches(connection):
     return matches
 
 
-def walk_forward(connection, minimum_samples=40, retrain_days=1):
+def walk_forward(connection, minimum_samples=40, retrain_days=1, league='E0'):
     """Score strictly pre-kickoff forecasts, optionally sharing a recent fit."""
     if minimum_samples < 1:
         raise ValueError('minimum_samples must be positive')
     if retrain_days < 1:
         raise ValueError('retrain_days must be positive')
-    fixtures = completed_matches(connection)
+    fixtures = completed_matches(connection, league)
     evaluations = []
     models = {}
     for fixture in fixtures:
@@ -59,7 +59,7 @@ def walk_forward(connection, minimum_samples=40, retrain_days=1):
         interval = datetime.fromisoformat(fixture['kickoff']).date().toordinal() // retrain_days
         model = models.get(interval)
         if model is None:
-            prior = history(connection, fixture['kickoff'])
+            prior = history(connection, fixture['kickoff'], league)
             if len(prior) < minimum_samples:
                 models[interval] = False
                 continue
@@ -86,18 +86,18 @@ def walk_forward(connection, minimum_samples=40, retrain_days=1):
     return evaluations
 
 
-def walk_forward_player(connection, minimum_samples=40, retrain_days=1, config=None):
+def walk_forward_player(connection, minimum_samples=40, retrain_days=1, config=None, league='E0'):
     """Evaluate actual historical XIs with only pre-kickoff player data."""
-    fixtures = completed_matches(connection); evaluations = []; models = {}
+    fixtures = completed_matches(connection, league); evaluations = []; models = {}
     for fixture in fixtures:
-        features = historical_lineups(connection, fixture['id'], fixture['kickoff'])
+        features = historical_lineups(connection, fixture['id'], fixture['kickoff'], league)
         if not features: continue
         interval = datetime.fromisoformat(fixture['kickoff']).date().toordinal() // retrain_days
         model = models.get(interval)
         if model is None:
-            prior = history(connection, fixture['kickoff']); train_features = {}
+            prior = history(connection, fixture['kickoff'], league); train_features = {}
             for item in prior:
-                value = historical_lineups(connection, item['id'], item['kickoff'])
+                value = historical_lineups(connection, item['id'], item['kickoff'], league)
                 if value: train_features[item['id']] = value
             prior = [item for item in prior if item['id'] in train_features]
             model = fit_dixon_coles(prior, fixture['kickoff'], train_features, version='xi-v2', config=config) if len(prior) >= minimum_samples else False
@@ -141,20 +141,20 @@ def summary(evaluations, calibration_bins=10):
     }
 
 
-def evaluate_candidate(connection, minimum_samples=40, retrain_days=1):
+def evaluate_candidate(connection, minimum_samples=40, retrain_days=1, league='E0'):
     """Persist the pre-registered baseline-vs-XI candidate comparison.
 
     Market validation is deliberately prospective: historical odds are not
     imported, so a candidate cannot become promotion-eligible before 200
     timestamped XI forecasts have accumulated in the local ledger.
     """
-    baseline = summary(walk_forward(connection, minimum_samples, retrain_days))
-    trials = [(config, summary(walk_forward_player(connection, minimum_samples, retrain_days, config))) for config in XI_TUNING_CONFIGS]
+    baseline = summary(walk_forward(connection, minimum_samples, retrain_days, league))
+    trials = [(config, summary(walk_forward_player(connection, minimum_samples, retrain_days, config, league))) for config in XI_TUNING_CONFIGS]
     viable = [trial for trial in trials if trial[1]['fixtures'] and trial[1]['brier_score'] <= baseline['brier_score']]
     selected_config, candidate = min(viable or trials, key=lambda trial: float('inf') if trial[1]['log_loss'] is None else trial[1]['log_loss'])
     prospective = connection.execute("""SELECT COUNT(DISTINCT p.match_id) FROM predictions p
         JOIN models m ON m.id=p.model_id JOIN quotes q ON q.match_id=p.match_id
-        WHERE m.metrics LIKE '%xi-v2%' AND p.features LIKE '%confirmed-xi%' AND q.verified=1""").fetchone()[0]
+        WHERE m.competition=? AND m.metrics LIKE '%xi-v2%' AND p.features LIKE '%confirmed-xi%' AND q.verified=1""", (league,)).fetchone()[0]
     historical_ok = bool(candidate['fixtures'] >= minimum_samples and baseline['fixtures'] >= minimum_samples
                          and candidate['log_loss'] < baseline['log_loss']
                          and candidate['brier_score'] <= baseline['brier_score'])
@@ -166,9 +166,9 @@ def evaluate_candidate(connection, minimum_samples=40, retrain_days=1):
     fixtures = candidate['fixtures']
     start = end = None
     if candidate['fixtures']:
-        values = walk_forward_player(connection, minimum_samples, retrain_days, selected_config)
+        values = walk_forward_player(connection, minimum_samples, retrain_days, selected_config, league)
         start, end = values[0]['kickoff'], values[-1]['kickoff']
     connection.execute('INSERT INTO model_evaluations(model_version,created_at,started_at,ended_at,fixtures,metrics,benchmark,eligible) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(model_version,started_at,ended_at) DO UPDATE SET created_at=excluded.created_at,fixtures=excluded.fixtures,metrics=excluded.metrics,benchmark=excluded.benchmark,eligible=excluded.eligible',
-                       ('xi-v2', now(), start, end, fixtures, dump(metrics), dump({'prospective_xi_fixtures':prospective,'required':200}), int(eligible)))
-    set_setting(connection, 'xi_model_config', selected_config)
-    return {'model_version': 'xi-v2', 'eligible': eligible, 'historical_ok': historical_ok, 'prospective_xi_fixtures': prospective, 'selected_config': selected_config, **metrics}
+                       (f'{league}:xi-v2', now(), start, end, fixtures, dump(metrics), dump({'competition':league,'prospective_xi_fixtures':prospective,'required':200}), int(eligible)))
+    set_setting(connection, f'xi_model_config:{league}', selected_config)
+    return {'competition':league,'model_version': 'xi-v2', 'eligible': eligible, 'historical_ok': historical_ok, 'prospective_xi_fixtures': prospective, 'selected_config': selected_config, **metrics}

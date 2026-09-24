@@ -23,26 +23,25 @@ def test_initialize_renames_legacy_app_state():
 def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):
     calls = []
 
-    def sync(connection, seasons):
-        calls.append(list(seasons))
+    def sync(connection, league, seasons, **_):
+        calls.append((league, list(seasons)))
         return 0
 
-    monkeypatch.setattr(engine, 'sync_epl_seasons', sync)
-    assert engine.bootstrap('2026-09-17T12:00:00+00:00') is True
-    assert calls == [[2023, 2024, 2025, 2026]]
-    assert engine.bootstrap('2026-09-17T12:00:00+00:00') is False
+    monkeypatch.setattr(engine, 'sync_seasons', sync)
+    assert engine.bootstrap('2026-09-17T12:00:00+00:00') == {'league': 'E0', 'season': 2023}
+    assert calls == [('E0', [2023])]
 
 
 def test_current_season_refresh_uses_understat(monkeypatch):
     calls = []
 
-    def sync(connection, seasons):
-        calls.append(list(seasons))
+    def sync(connection, league, seasons, **_):
+        calls.append((league, list(seasons)))
         return 42
 
-    monkeypatch.setattr(engine, 'sync_epl_seasons', sync)
-    assert engine.import_scores('2026-02-01T12:00:00+00:00') == 42
-    assert calls == [[2025]]
+    monkeypatch.setattr(engine, 'sync_seasons', sync)
+    assert engine.import_scores('2026-02-01T12:00:00+00:00') == 210
+    assert calls == [(league, [2025]) for league in ('E0', 'SP1', 'D1', 'I1', 'F1')]
 
 
 def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monkeypatch):
@@ -124,17 +123,18 @@ def test_early_odds_window_only_prepares_forecasts(monkeypatch):
 
 
 def test_engine_refresh_endpoint_requires_the_deployment_token(monkeypatch):
-    monkeypatch.setattr(api, 'tick', lambda: {'ok': True, 'refreshed': 0})
+    monkeypatch.setattr(api, 'acquire', lambda *_, **__: 'lease')
+    monkeypatch.setattr(api, 'tick', lambda **_: {'ok': True, 'refreshed': 0})
     monkeypatch.setenv('TOUCHLINE_DEPLOY_REFRESH_TOKEN', 'test-token')
     with TestClient(api.create_app(setup=False)) as client:
         assert client.post('/api/v1/refresh-engine').status_code == 404
         response = client.post('/api/v1/refresh-engine', headers={'X-Deployment-Refresh-Token': 'test-token'})
     assert response.status_code == 200
-    assert response.json() == {'ok': True, 'refreshed': 0}
+    assert response.json() == {'ok': True, 'started': True}
 
 
 def test_engine_refresh_endpoint_waits_for_the_running_cycle(monkeypatch):
-    monkeypatch.setattr(api, 'tick', lambda: {'ok': True, 'skipped': True})
+    monkeypatch.setattr(api, 'acquire', lambda *_, **__: None)
     monkeypatch.setenv('TOUCHLINE_DEPLOY_REFRESH_TOKEN', 'test-token')
     with TestClient(api.create_app(setup=False)) as client:
         response = client.post('/api/v1/refresh-engine', headers={'X-Deployment-Refresh-Token': 'test-token'})
