@@ -14,7 +14,8 @@ final market capture supports closing-line-value reporting.
 The confirmed-XI model remains a shadow model until it passes historical checks
 and has 200 timestamped live XI/market observations. The baseline model is the
 safe default until an operator promotes the XI model explicitly for that
-league. The dashboard selector filters fixtures, bets, and engine coverage;
+league. The dashboard's compact League control filters fixtures, bets, and
+engine coverage while keeping the selected league in the URL;
 bankroll and exposure remain shared. See the root README for per-league
 backtesting and promotion commands.
 
