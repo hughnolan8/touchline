@@ -1,17 +1,19 @@
 """Public Premier League paper simulation API."""
 import json
+import hmac
+import os
 from contextlib import asynccontextmanager
 from threading import Lock
 from pathlib import Path
 import psycopg
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI,HTTPException,Header
 from fastapi.responses import FileResponse,JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from backend.db import connect,rows,now,setting
 from backend.engine import account,matches,forecast,discrepancies,fixture_window,seconds,initial_snapshot,snapshot_discrepancies
 from .store import configure,initialize,acquire,release
-from .engine import refresh_all,refresh_missing_odds
+from .engine import refresh_all,refresh_missing_odds,tick
 from .provider import odds_api_configured
 def serialize(b):
  s=json.loads(b['snapshot']);closing=None
@@ -100,4 +102,11 @@ def create_app(setup=True):
   if not token:raise HTTPException(409,'An odds refresh is already running')
   try:return refresh_missing_odds()
   finally:release('missing-odds-refresh',token)
+ @app.post('/api/v1/refresh-engine')
+ def refresh_engine_endpoint(x_deployment_refresh_token:str|None=Header(default=None)):
+  token=os.environ.get('TOUCHLINE_DEPLOY_REFRESH_TOKEN')
+  if not token or not x_deployment_refresh_token or not hmac.compare_digest(token,x_deployment_refresh_token):raise HTTPException(404)
+  result=tick()
+  if result.get('skipped'):raise HTTPException(409,'An engine refresh is already running')
+  return result
  return app

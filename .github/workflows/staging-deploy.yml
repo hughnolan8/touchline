@@ -23,20 +23,18 @@ jobs:
        startsWith(github.event.workflow_run.head_branch, 'codex/'))
     runs-on: ubuntu-latest
     environment: staging
+    strategy:
+      matrix:
+        service: [api, engine]
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Deploy API to shared staging
+      - name: Deploy ${{ matrix.service }} to shared staging
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service api
-      - name: Deploy engine to shared staging
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service engine
+        run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "${{ matrix.service }}"
   validate:
     needs: deploy
     uses: ./.github/workflows/staging-support.yml
