@@ -22,11 +22,14 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
+          REF_NAME: ${{ github.ref_name }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
         run: |
           if [ "$EVENT_NAME" = pull_request ]; then
             scripts/check-documentation.sh "origin/$BASE_REF...HEAD"
+          elif [ "$REF_NAME" != main ]; then
+            scripts/check-documentation.sh "origin/main...$SHA"
           elif [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
             scripts/check-documentation.sh "$BEFORE..$SHA"
           fi

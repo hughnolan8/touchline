@@ -87,11 +87,16 @@ def main():
     parser.add_argument('--config', type=Path, default=Path(__file__).resolve().parents[1] / 'data/runtime/railway.json')
     parser.add_argument('--timeout-seconds', type=int, default=600)
     parser.add_argument('--interval-seconds', type=int, default=60)
+    parser.add_argument('--started-at', help='UTC ISO timestamp before the deployment refresh')
     args = parser.parse_args()
     if args.timeout_seconds < 0 or args.interval_seconds <= 0:
         parser.error('timeout must be non-negative and interval must be positive')
     base_url = (args.base_url or json.loads(args.config.read_text())['mobile_api_url']).rstrip('/')
-    ok, results, problems, last_success = monitor(base_url, args.timeout_seconds, args.interval_seconds)
+    started_at = timestamp(args.started_at) if args.started_at else None
+    if args.started_at and started_at is None:
+        parser.error('--started-at must be an ISO 8601 timestamp with a timezone')
+    ok, results, problems, last_success = monitor(base_url, args.timeout_seconds, args.interval_seconds,
+                                                   clock=lambda: started_at or datetime.now(timezone.utc))
     print(report(ok, results, problems, last_success, args.environment))
     return 0 if ok else 1
 

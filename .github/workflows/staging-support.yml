@@ -27,11 +27,38 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Run the full test suite for this staging release
+        run: |
+          pip install -r requirements.txt
+          python -m pytest -q
+      - name: Force an engine refresh
+        env:
+          DEPLOYMENT_API_URL: ${{ vars.STAGING_API_URL }}
+          DEPLOYMENT_REFRESH_TOKEN: ${{ secrets.DEPLOYMENT_REFRESH_TOKEN }}
+        run: |
+          echo "DEPLOYMENT_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            status=$(curl --silent --show-error --output "$RUNNER_TEMP/engine-refresh.json" --write-out '%{http_code}' --max-time 300 --request POST --header "X-Deployment-Refresh-Token: $DEPLOYMENT_REFRESH_TOKEN" "$DEPLOYMENT_API_URL/api/v1/refresh-engine" || true)
+            if [ "$status" = 200 ]; then
+              cat "$RUNNER_TEMP/engine-refresh.json"
+              exit 0
+            fi
+            case "$status" in
+              000|409|502|503|504) sleep 5 ;;
+              *) cat "$RUNNER_TEMP/engine-refresh.json"; exit 1 ;;
+            esac
+          done
+          echo 'Timed out waiting to force an engine refresh.' >&2
+          exit 1
       - name: Validate public staging health
         env:
           DEPLOYMENT_API_URL: ${{ vars.STAGING_API_URL }}
           DEPLOYMENT_ENVIRONMENT: staging
-        run: python scripts/check-production.py --timeout-seconds 600 --interval-seconds 30 | tee "$GITHUB_STEP_SUMMARY"
+        run: python scripts/check-production.py --started-at "$DEPLOYMENT_STARTED_AT" --timeout-seconds 600 --interval-seconds 30 | tee "$GITHUB_STEP_SUMMARY"
       - name: Capture Railway failure logs
         if: always()
         env:
