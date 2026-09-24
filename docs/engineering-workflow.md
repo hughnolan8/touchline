@@ -15,6 +15,11 @@ or dependencies.
    .pythonenv/bin/python -m pytest -q
    ```
 
+   Pytest reports line coverage for `backend` and lists missed lines. Review
+   material gaps in application behaviour and add focused, deterministic tests
+   with the change; do not add a percentage gate until the suite has a stable
+   baseline.
+
 3. Review `git status --short`, stage only the completed change, then make one
    focused commit and push it to a release branch (`feature/**`, `fix/**`, or
    `codex/**`). Staging validates it before GitHub opens and auto-merges the
