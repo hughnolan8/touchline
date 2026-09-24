@@ -54,11 +54,7 @@ Create protected GitHub environments named `staging` and `production`. In each
 environment, store a Railway project token as `RAILWAY_TOKEN`; tokens must be
 scoped to the matching Railway environment. Set repository or environment
 variables `RAILWAY_PROJECT_ID` and `STAGING_API_URL` (the latter only needs to
-exist for staging). Generate a random `DEPLOYMENT_REFRESH_TOKEN`, store it as
-the `TOUCHLINE_DEPLOY_REFRESH_TOKEN` variable on the staging API service and
-as the `DEPLOYMENT_REFRESH_TOKEN` secret in the GitHub `staging` environment.
-It authorizes the post-deploy engine cycle; do not configure it in production.
-Never commit these tokens or database URLs.
+exist for staging). Never commit tokens or database URLs.
 
 Enable Codex's connected GitHub pull-request review. Protect `main`: require
 the GitHub Actions `test` and `validate` job checks, one Codex approval, no
@@ -74,10 +70,10 @@ approval mandatory.
 2. The staging deploy workflow uploads that exact commit to staging `api` and
    `engine`. Newer release work cancels the older staging run.
 3. The API and engine deploy in parallel. After both Railway CLI deployments
-   succeed, the staging deploy workflow runs the full Python test suite for
-   that commit, requests an engine cycle immediately, then validates healthy
-   public API/engine/summary responses and that forced cycle. It fails on
-   structured application failures and traceback signatures in Railway logs.
+   succeed, the workflow starts one engine cycle over Railway SSH, then calls
+   staging validation with that commit and branch. It waits for healthy public
+   API/engine/summary responses and the requested cycle to finish, then fails
+   on structured application failures and traceback signatures in Railway logs.
    It writes the resulting `validate` status to the tested commit, and failed
    diagnostics are retained as a workflow artifact.
 4. A passing release creates or updates its PR, requests Codex review, and

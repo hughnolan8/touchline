@@ -22,6 +22,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Start a production engine cycle
+        if: ${{ env.RAILWAY_TOKEN != '' }}
+        env:
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: npx --yes @railway/cli@latest ssh --project "$RAILWAY_PROJECT_ID" --environment production --service engine -- python -m backend.runner --once
       - name: Validate public production health
         env:
           DEPLOYMENT_API_URL: https://api-production-f10dd.up.railway.app

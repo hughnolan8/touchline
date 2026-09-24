@@ -3,8 +3,9 @@
 ## Deployments and production support
 
 Every push to `main` starts the **Production support** GitHub Actions workflow.
-It polls the public API for up to ten minutes and writes a pass/fail report to
-the job summary. A pass requires `/health`, `/health/engine`, and
+When its Railway token is configured, it starts one engine cycle over Railway
+SSH, then polls the public API for up to ten minutes and writes a pass/fail
+report to the job summary. A pass requires `/health`, `/health/engine`, and
 `/api/v1/summary` to succeed, with the summary reporting paper mode, a running
 engine, and an engine cycle completed after the check started.
 

@@ -35,15 +35,25 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
         run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "${{ matrix.service }}"
-  validate:
+  start-engine:
     needs: deploy
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Start a staging engine cycle
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: npx --yes @railway/cli@latest ssh --project "$RAILWAY_PROJECT_ID" --environment staging --service engine -- python -m backend.runner --once
+  validate:
+    needs: start-engine
     uses: ./.github/workflows/staging-support.yml
     with:
       sha: ${{ github.event.workflow_run.head_sha }}
       branch: ${{ github.event.workflow_run.head_branch }}
     secrets: inherit
   report-deploy-failure:
-    needs: deploy
+    needs: [deploy, start-engine]
     if: ${{ failure() }}
     runs-on: ubuntu-latest
     steps:
