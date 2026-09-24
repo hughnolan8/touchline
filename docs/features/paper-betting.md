@@ -25,3 +25,8 @@ the cycle then runs in the background and health checks wait for its result.
 Initial multi-league history is imported one competition-season result batch per
 engine cycle; roster hydration stays out of that bootstrap path so startup and
 health checks remain bounded.
+
+The Engine tab shows each league's imported result count, model count,
+seven-day fixture and verified-odds coverage, plus completed and pending
+history seasons. This remains visible when the dashboard selector filters the
+other views, so an operator can follow the overall bootstrap progress.
