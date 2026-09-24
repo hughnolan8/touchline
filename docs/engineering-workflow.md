@@ -21,9 +21,10 @@ or dependencies.
    baseline.
 
 3. Review `git status --short`, stage only the completed change, then make one
-   focused commit and push it to a release branch (`feature/**`, `fix/**`, or
-   `codex/**`). Staging validates it before GitHub opens and auto-merges the
-   pull request to `main`.
+   focused commit on a `codex/**` task branch. Push it with `git push -u origin
+   HEAD` and run `gh pr create --base main --fill` unless the branch already
+   has an open pull request. Staging validates the pull request before it can
+   merge to `main`; agents do not merge it themselves.
 
 Use `scripts/install-git-hooks.sh` once per clone to enable the local safety
 net. The pre-commit hook requires a Markdown update in `README.md` or `docs/`

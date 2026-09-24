@@ -15,13 +15,26 @@ Before committing a code change:
 2. Update the matching `docs/features/` page; update `README.md` when setup or
    user-facing behaviour changes.
 3. Confirm `git status --short` and stage only files belonging to the change.
-4. Create one focused commit and run `git push origin main`.
+4. Work on a dedicated `codex/<brief-name>` branch, never directly on `main`,
+   and create one focused commit.
+5. Push the branch with `git push -u origin HEAD`, then create its pull request
+   with `gh pr create --base main --fill` (or confirm the branch already has an
+   open PR). A code task is not complete until it has an open PR; do not merge
+   the PR or push directly to `main` unless the user explicitly asks.
 
 Do not add unrelated working-tree changes to the commit. In the completion
 message, name the test command, commit SHA, and documentation updated. Local
 hooks and GitHub Actions enforce documentation and tests, but cannot prove an
 agent followed Ponytail's reasoning; keep the resulting diff small and
 reviewable.
+
+## Parallel worktrees
+
+For concurrent coding tasks, work only in the task's assigned Git worktree and
+branch. Do not use the primary checkout for an isolated task, commit directly
+to `main`, or merge another task's branch. Give each task a dedicated branch
+using the `codex/` prefix; leave branch integration to the user or a designated
+integration task.
 
 ## Documentation
 
