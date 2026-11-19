@@ -1,0 +1,23 @@
+{% set items = recent if recent is defined else bets %}
+{% if items %}
+<div class="scroll"><table>
+  <thead><tr><th>Kick-off</th><th>Fixture</th><th>Pick</th><th class="n">Odds</th><th class="n">Stake</th><th class="n">Edge</th><th class="n">CLV</th><th>Status</th><th class="n">P&amp;L</th></tr></thead>
+  <tbody>
+  {% for b in items %}
+    <tr>
+      <td>{{ b.kickoff | when }}</td>
+      <td>{{ b.home_name }} v {{ b.away_name }}</td>
+      <td>{{ b.selection | title }}<small class="muted"> {{ b.bookmaker }}</small></td>
+      <td class="n">{{ '%.2f' % b.odds }}</td>
+      <td class="n">{{ b.stake | money }}</td>
+      <td class="n">{{ b.edge | pct }}</td>
+      <td class="n {{ 'pos' if b.clv and b.clv > 0 else 'neg' if b.clv and b.clv < 0 else '' }}">{{ b.clv | pct }}</td>
+      <td><span class="badge {{ b.status }}">{{ b.status }}</span></td>
+      <td class="n">{{ b.profit | money }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}
+<p class="muted">No paper bets yet. Bets are placed 30–60 minutes before kick-off once odds and a confirmed XI are in.</p>
+{% endif %}

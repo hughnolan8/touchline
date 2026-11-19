@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>Bets{% if league %} · {{ league_names[league] }}{% endif %}</h2>
+  {% include "_bets_table.html" with context %}
+</section>
+{% endblock %}

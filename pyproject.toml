@@ -1,8 +1,41 @@
 [project]
-name = "touchline-web"
-version = "0.1.0"
-dependencies = [ "fastapi>=0.115, <1", "uvicorn>=0.34, <1", "numpy>=2.2, <3", "scipy>=1.15, <2", "httpx>=0.28, <1", "pytest>=8, <10", "pytest-cov>=7, <8", "psycopg[binary]>=3.2, <4", "understatapi==0.7.1" ]
+name = "touchline"
+version = "2.0.0"
+description = "Paper-betting automator for Europe's top five football leagues"
 requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
+    "jinja2>=3.1,<4",
+    "httpx>=0.28,<1",
+    "numpy>=2.2,<3",
+    "scipy>=1.15,<2",
+    "understatapi==0.7.1",
+]
+
+[project.scripts]
+touchline = "touchline.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["touchline"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=backend --cov-report=term-missing"
+addopts = "-q"
+testpaths = ["tests"]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]

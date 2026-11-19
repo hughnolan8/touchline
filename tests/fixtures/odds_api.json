@@ -1,0 +1,17 @@
+[
+  {"id": "e1", "sport_key": "soccer_epl", "commence_time": "2026-03-01T15:00:00Z",
+   "home_team": "Arsenal", "away_team": "Chelsea",
+   "bookmakers": [
+     {"key": "bet365", "last_update": "2026-03-01T14:00:00Z",
+      "markets": [{"key": "h2h", "last_update": "2026-03-01T14:00:00Z", "outcomes": [
+        {"name": "Arsenal", "price": 2.4}, {"name": "Draw", "price": 3.4},
+        {"name": "Chelsea", "price": 3.2}]}]},
+     {"key": "skybet", "last_update": "2026-03-01T14:01:00Z",
+      "markets": [{"key": "h2h", "outcomes": [
+        {"name": "Arsenal", "price": 2.7}, {"name": "Draw", "price": 3.1},
+        {"name": "Chelsea", "price": 3.0}]}]},
+     {"key": "unknown_book", "last_update": "2026-03-01T14:00:00Z",
+      "markets": [{"key": "h2h", "outcomes": [{"name": "Arsenal", "price": 9.0}]}]}
+   ]},
+  {"id": "bad", "home_team": "Arsenal"}
+]

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>Next 7 days{% if league %} · {{ league_names[league] }}{% endif %}</h2>
+  {% if fixtures %}
+  <div class="scroll"><table>
+    <thead><tr><th>Kick-off</th><th>Fixture</th>
+      {% for s in ['Home', 'Draw', 'Away'] %}<th class="n">{{ s }}</th>{% endfor %}
+      <th>Value</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for f in fixtures %}
+      <tr>
+        <td>{{ f.kickoff | when }}{% if not league %}<small class="muted"> {{ f.league }}</small>{% endif %}</td>
+        <td>{{ f.home_name }} v {{ f.away_name }}</td>
+        {% for s in ['home', 'draw', 'away'] %}
+        <td class="n">
+          {% if f.probs %}{{ f.probs[s] | pct(0) }}{% else %}–{% endif %}
+          {% if f.prices[s] %}<small class="muted"> @ {{ '%.2f' % f.prices[s].odds }}</small>{% endif %}
+        </td>
+        {% endfor %}
+        <td>
+          {% if f.pick %}<span class="{{ 'pos' if f.edges[f.pick] > 0 else 'muted' }}">{{ f.pick | title }} {{ f.edges[f.pick] | pct }}</span>
+          {% elif not f.probs %}<span class="muted">no forecast</span>
+          {% else %}<span class="muted">no odds yet</span>{% endif %}
+        </td>
+        <td>{% if f.decision %}<span class="badge {{ f.decision.action }}" title="{{ f.decision.reason }}">{{ f.decision.action | replace('_', ' ') }}</span>{% else %}<span class="muted">waiting</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="muted">Model probabilities ({{ 'XI model when a lineup is confirmed, otherwise ' }}Dixon–Coles baseline) against the best UK price. Value is the edge of the best-priced outcome.</p>
+  {% else %}
+  <p class="muted">No fixtures in the next seven days. Run <code>touchline backfill</code> if this is a fresh database.</p>
+  {% endif %}
+</section>
+{% endblock %}

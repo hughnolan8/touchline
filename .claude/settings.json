@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run touchline backtest:*)",
+      "Bash(uv run touchline --help)",
+      "Bash(uv run python scripts/check_size.py)",
+      "Bash(uv run python scripts/demo_data.py)",
+      "Bash(uv sync:*)",
+      "Bash(fly status:*)",
+      "Bash(fly logs:*)",
+      "Bash(fly releases:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
+    ]
+  }
+}

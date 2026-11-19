@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div hx-get="/engine" hx-trigger="every 60s" hx-select="#engine" hx-target="#engine" hx-swap="outerHTML"></div>
+<div id="engine">
+<section class="card">
+  <h2>Leagues</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>League</th><th class="n">Results</th><th class="n">Upcoming</th><th class="n">Rosters</th><th>Baseline fit</th><th>XI fit</th><th>Active</th><th>Synced</th><th>Odds</th></tr></thead>
+    <tbody>
+    {% for lg in leagues %}
+      <tr>
+        <td>{{ lg.name }}</td><td class="n">{{ lg.results }}</td><td class="n">{{ lg.scheduled }}</td><td class="n">{{ lg.rosters }}</td>
+        <td>{{ lg.baseline.created_at | when if lg.baseline else '–' }}</td>
+        <td>{{ lg.xi.created_at | when if lg.xi else '–' }}</td>
+        <td>{{ lg.active }}</td><td>{{ lg.synced | when }}</td><td>{{ lg.odds | when }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="muted">Odds API credits remaining: {{ odds_api.remaining if odds_api else 'unknown' }}</p>
+</section>
+<section class="card">
+  <h2>Recent ticks</h2>
+  {% if ticks %}
+  <ul class="ticks">
+  {% for t in ticks %}
+    <li><span class="badge {{ 'won' if t.ok else 'lost' if t.ok == 0 else 'open' }}">{{ 'ok' if t.ok else 'failed' if t.ok == 0 else 'running' }}</span>
+      {{ t.started_at | when }}
+      <small class="muted">{% for k, v in t.summary.items() if k not in ('decisions', 'errors') %}{{ k }}={{ v }} {% endfor %}</small>
+      {% for d in t.summary.get('decisions', []) %}<div><small>{{ d }}</small></div>{% endfor %}
+      {% for e in t.summary.get('errors', []) %}<div class="neg"><small>{{ e }}</small></div>{% endfor %}
+      {% if t.summary.error %}<div class="neg"><small>{{ t.summary.error }}</small></div>{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No ticks yet.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Quarantine <small class="muted">{{ quarantine_total }} total</small></h2>
+  {% if quarantine %}
+  <ul class="ticks">{% for q in quarantine %}<li><small>{{ q.created_at | when }} · {{ q.source }} · {{ q.reason }}</small></li>{% endfor %}</ul>
+  <p class="muted">Unmatched team spellings belong in <code>touchline/teams.py</code>.</p>
+  {% else %}<p class="muted">Nothing quarantined.</p>{% endif %}
+</section>
+</div>
+<section class="card">
+  <h2>Actions</h2>
+  {% if admin_enabled %}
+  <div class="actions">
+    <form method="post" action="/admin/tick" hx-boost="false"><button>Run tick now</button></form>
+    <form method="post" action="/admin/odds" hx-boost="false"><button>Refresh all odds (5 credits)</button></form>
+    <form method="post" action="/admin/refit" hx-boost="false"><button>Refit models</button></form>
+  </div>
+  {% else %}<p class="muted">Set <code>TOUCHLINE_ADMIN_TOKEN</code> to enable admin actions.</p>{% endif %}
+</section>
+{% endblock %}

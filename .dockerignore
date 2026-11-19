@@ -1,11 +1,6 @@
 **
-!Dockerfile
-!requirements.lock.txt
-!backend/
-!backend/**
-!scripts/
-!scripts/reset-railway-data.py
-!web/
-!web/**
-backend/**/__pycache__/
-backend/**/*.pyc
+!pyproject.toml
+!uv.lock
+!touchline/
+!README.md
+**/__pycache__/

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+{% set a = account %}
+<section class="tiles">
+  <div class="tile"><span>Balance</span><strong>{{ a.balance | money }}</strong></div>
+  <div class="tile"><span>Profit</span><strong class="{{ 'pos' if a.profit > 0 else 'neg' if a.profit < 0 else '' }}">{{ a.profit | money }}</strong></div>
+  <div class="tile"><span>ROI</span><strong>{{ a.roi | pct }}</strong></div>
+  <div class="tile"><span>Win rate</span><strong>{{ a.win_rate | pct(0) }}</strong></div>
+  <div class="tile"><span>Max drawdown</span><strong>{{ a.drawdown | pct }}</strong></div>
+  <div class="tile"><span>Open</span><strong>{{ a.open }} · {{ a.reserved | money }}</strong></div>
+</section>
+<section class="card">
+  <h2>Equity</h2>
+  {{ equity }}
+  <p class="muted">{{ a.settled }} settled bets from a £1,000 virtual bankroll shared by all leagues.</p>
+</section>
+<section class="card">
+  <h2>Recent bets{% if league %} · {{ league_names[league] }}{% endif %}</h2>
+  {% include "_bets_table.html" with context %}
+</section>
+{% endblock %}

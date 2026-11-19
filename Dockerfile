@@ -1,11 +1,13 @@
 FROM python:3.12-slim
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app
-COPY requirements.lock.txt ./
-RUN pip install --no-cache-dir -r requirements.lock.txt
-COPY backend ./backend
-COPY scripts/reset-railway-data.py ./scripts/reset-railway-data.py
-COPY web ./web
-RUN useradd --create-home --uid 10001 touchline
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+COPY touchline ./touchline
+RUN uv sync --frozen --no-dev && useradd --create-home --uid 10001 touchline \
+    && mkdir -p /data && chown touchline /data
 USER touchline
-CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+ENV PATH="/app/.venv/bin:$PATH" TOUCHLINE_DB=/data/touchline.sqlite3
+EXPOSE 8080
+CMD ["uvicorn", "touchline.web.app:app", "--host", "0.0.0.0", "--port", "8080"]
