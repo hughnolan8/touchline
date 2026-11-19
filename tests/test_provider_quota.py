@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
+from backend.app import provider
 from backend.app.provider import MobileOdds, reserve_request
 from backend.db import connect, setting
 from backend.odds_api import OddsApiError
@@ -39,3 +41,13 @@ def test_failed_provider_request_consumes_reserved_quota(monkeypatch):
         odds._get('/events', {}, AT)
     with connect() as c:
         assert setting(c, 'odds_api_requests:2026-09-23') == 1
+
+
+def test_refresh_logs_when_the_provider_returns_no_events(monkeypatch):
+    monkeypatch.setenv('TOUCHLINE_ODDS_API_KEY', 'test-key')
+    logged = []
+    monkeypatch.setattr(MobileOdds, '_get', lambda *_: ([], SimpleNamespace(headers={})))
+    monkeypatch.setattr(provider, 'event', lambda name, **fields: logged.append((name, fields)))
+
+    assert MobileOdds().refresh([{'competition': 'E0'}], AT) == 0
+    assert logged == [('odds_refresh_finished', {'requested': 1, 'matched': 0, 'fixtures': 0})]

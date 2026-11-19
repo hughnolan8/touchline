@@ -93,8 +93,9 @@ review (when a score remains incomplete). Settlement is idempotent and uses the
 fixed entry snapshot, not the closing line. The dashboard reads the public API
 for a shared bankroll/performance summary, selected-league forecasts and bets,
 and all-league engine coverage. Its manual refresh endpoints run the same
-engine helpers under separate leases; deployment refresh requires its shared
-secret header and runs in the background.
+engine helpers under separate leases; an empty provider event list is a
+successful zero-fixture refresh. Deployment refresh requires its shared secret
+header and runs in the background.
 
 ## Operational guardrails
 
