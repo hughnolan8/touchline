@@ -15,9 +15,9 @@
   <h2>Build an accumulator{% if league %} · {{ league_names[league] }}{% endif %}</h2>
   <form method="get" action="/accumulator" class="actions">
     {% if league %}<input type="hidden" name="league" value="{{ league }}">{% endif %}
-    <label title="The N most likely legs that still have value">Best
+    <label title="The N most likely outcomes by model chance, one per fixture">Most likely
       <input type="number" name="auto" min="1" max="{{ max_legs }}" step="1" value="{{ auto }}" inputmode="numeric" class="short">
-      value legs</label>
+      legs</label>
     <button>Suggest</button>
     <a class="chip" href="/accumulator{{ '?league=' ~ league if league else '' }}">Clear</a>
   </form>
