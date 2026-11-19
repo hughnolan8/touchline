@@ -178,7 +178,6 @@ def run(at: str, src: Sources) -> dict:
             ledger.close(conn, bets[m["id"]], at, s.max_quote_age) for m, s in closing
         )
         summary["settled"] = ledger.settle(conn, at)
-        summary["notified"] = ledger.notify(conn)
     if src.errors:
         summary["errors"] = src.errors
     return summary

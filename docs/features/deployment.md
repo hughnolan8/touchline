@@ -10,7 +10,7 @@ There is one machine in `lhr`, running the web UI and scheduler on SQLite, with 
 ```bash
 fly launch --no-deploy --copy-config          # pick an app name; it is written to fly.toml
 fly volumes create touchline_data --region lhr --size 1
-fly secrets set ODDS_API_KEY=... TOUCHLINE_ADMIN_TOKEN=... PUSHOVER_APP_TOKEN=... PUSHOVER_USER_KEY=...
+fly secrets set ODDS_API_KEY=... TOUCHLINE_ADMIN_TOKEN=...
 fly deploy
 fly ssh console -C "touchline backfill --seasons 4"
 ```

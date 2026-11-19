@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from tests.helpers import FIXTURES, load
-from touchline.sources import football_data, fotmob, odds_api, pushover, understat
+from touchline.sources import football_data, fotmob, odds_api, understat
 
 
 def test_odds_api_parses_whitelisted_books_and_rejects_bad_events():
@@ -87,7 +87,3 @@ def test_fotmob_unconfirmed_lineup_is_ignored():
     payload = load("fotmob_details.json")
     payload["content"]["lineup"]["confirmed"] = False
     assert fotmob.parse_lineup(payload) is None
-
-
-def test_pushover_is_a_no_op_without_credentials():
-    assert pushover.send("t", "m") is False

@@ -25,8 +25,8 @@ a database with synthetic data for UI work.
 | `ODDS_API_KEY` | The Odds API key (odds are skipped without it) |
 | `ODDS_MAX_REQUESTS_PER_DAY` | Optional daily credit cap |
 | `ODDS_REFRESH_HOURS` | Background odds refresh interval (default 24) |
+| `ODDS_CLOSING_REFRESH` | `0` skips the closing-line odds refresh (default `1`) |
 | `TOUCHLINE_ADMIN_TOKEN` | Basic-auth password for Engine page actions (disabled if unset) |
-| `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY` | Optional alerts for bets and missed fixtures |
 | `TOUCHLINE_DB` | SQLite path (default `data/touchline.sqlite3`) |
 
 ## Docs
