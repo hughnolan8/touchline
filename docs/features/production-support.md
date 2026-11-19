@@ -30,6 +30,8 @@ so operator logs identify the failing subsystem without exposing exception
 messages or stored data.
 Invalid bootstrap progress is identified by league and setting key, never by
 the stored value.
+Malformed stored match statistics are quarantined and rebuilt from the active
+provider record; logs identify the affected match only.
 
 For an on-demand investigation, ask a Codex agent for production support. It
 will inspect public health first and may use local Railway status/log access

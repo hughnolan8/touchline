@@ -34,6 +34,14 @@ def test_settlement_is_idempotent():
   place_required_bet(c,m,{'probabilities':{'home':.6,'draw':.2,'away':.2}},at);c.execute('UPDATE matches SET status=?,stats=? WHERE id=?',('finished',dump({'hg':2,'ag':1}),mid))
  assert settle()==1 and settle()==0
  with connect() as c:assert account(c)['balance']>1000
+def test_ingestion_repairs_malformed_stored_match_stats(capsys):
+ with connect() as c:
+  mid=ingest_match(c,'test','broken-stats','E0','Arsenal','Chelsea','2026-09-24T12:00:00+00:00',True,'finished',{'hg':1,'ag':0},now())
+  c.execute("UPDATE matches SET stats='not-json' WHERE id=?",(mid,))
+  ingest_match(c,'test','broken-stats','E0','Arsenal','Chelsea','2026-09-24T12:00:00+00:00',True,'finished',{'hg':2,'ag':1},now())
+  assert json.loads(c.execute('SELECT stats FROM matches WHERE id=?',(mid,)).fetchone()[0])=={'hg':2,'ag':1}
+  assert c.execute("SELECT 1 FROM quarantine WHERE reason='Invalid stored match stats' AND payload LIKE ?",(f'%{mid}%',)).fetchone()
+ assert '"event":"stored_match_stats_invalid"' in capsys.readouterr().out
 def test_discrepancies_use_consensus_and_best_execution_price():
  mid,m=fixture()
  with connect() as c:
