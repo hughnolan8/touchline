@@ -19,7 +19,7 @@ Files: `touchline/web/*`, `touchline/accumulator.py`
 - **Accumulator builder.** A calculator, not a bet: nothing is written to the paper ledger.
   Only fixtures with both a forecast and odds are listed, each leg uses the best UK price,
   and the model chance is the product of the legs' probabilities (legs treated as
-  independent, one per fixture, at most 12). "Best N value legs" fills in N
+  independent, one per fixture, at most 12). A "Best N value legs" number box (1–12) fills in N
   positive-edge outcomes, one per fixture, ranked by model chance first and edge second, so
   the accumulator favours legs most likely to land. The state lives in the query string
   (`?leg.<match_id>=home&stake=10`, or `?auto=3`), so a built accumulator can be shared

@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-{% set q = '&league=' ~ league if league else '' %}
 <section class="tiles" aria-label="Accumulator summary">
   <div class="tile"><span>Legs</span><strong>{{ acca.legs }}</strong></div>
   <div class="tile"><span>Combined odds</span><strong>{{ '%.2f' % acca.odds if acca.odds else '–' }}</strong></div>
@@ -14,10 +13,14 @@
 
 <section class="card">
   <h2>Build an accumulator{% if league %} · {{ league_names[league] }}{% endif %}</h2>
-  <p class="actions">
-    {% for n in [2, 3, 4] %}<a class="chip" href="/accumulator?auto={{ n }}{{ q }}" title="The {{ n }} most likely legs that still have value">Best {{ n }} value legs</a>{% endfor %}
+  <form method="get" action="/accumulator" class="actions">
+    {% if league %}<input type="hidden" name="league" value="{{ league }}">{% endif %}
+    <label title="The N most likely legs that still have value">Best
+      <input type="number" name="auto" min="1" max="{{ max_legs }}" step="1" value="{{ auto }}" inputmode="numeric" class="short">
+      value legs</label>
+    <button>Suggest</button>
     <a class="chip" href="/accumulator{{ '?league=' ~ league if league else '' }}">Clear</a>
-  </p>
+  </form>
   {% if fixtures %}
   <form method="get" action="/accumulator">
     {% if league %}<input type="hidden" name="league" value="{{ league }}">{% endif %}

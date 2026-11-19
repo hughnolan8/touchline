@@ -102,12 +102,14 @@ def accumulator_page(request: Request):
     except ValueError:
         stake = 10.0
     chosen = {k[4:]: v for k, v in params.items() if k.startswith("leg.") and v}
+    auto = params.get("auto", "")
     with connect() as conn:
-        if params.get("auto", "").isdigit():
+        if auto.isdigit():
             fixtures = queries.predictions(conn, _league(request), now())
-            chosen = accumulator.suggest(fixtures, int(params["auto"]))
+            chosen = accumulator.suggest(fixtures, int(auto))
         data = queries.accumulator_builder(conn, _league(request), now(), chosen, stake)
-    return page(request, "accumulator", **data)
+    size = min(max(int(auto), 1), accumulator.MAX_LEGS) if auto.isdigit() else 3
+    return page(request, "accumulator", auto=size, max_legs=accumulator.MAX_LEGS, **data)
 
 
 @app.get("/bets")
