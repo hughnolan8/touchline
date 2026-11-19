@@ -62,12 +62,16 @@ def pick(fixtures: list[dict], chosen: dict[str, str]) -> list[dict]:
 
 
 def suggest(fixtures: list[dict], size: int) -> dict[str, str]:
-    """The `size` most likely legs, at most one per fixture, whether or not they have value.
+    """The `size` most likely positive-value legs, at most one per fixture.
 
     Ranked by model chance first, then edge, so the accumulator is as likely to land as
-    possible; edge only breaks ties.
+    possible while every leg still has value.
     """
     rank = lambda leg: (leg["probability"], leg["edge"])  # noqa: E731
-    best = [max(options, key=rank) for f in fixtures if (options := candidates(f))]
+    best = []
+    for f in fixtures:
+        value = [leg for leg in candidates(f) if leg["edge"] > 0]
+        if value:
+            best.append(max(value, key=rank))
     best.sort(key=rank, reverse=True)
     return {leg["match_id"]: leg["selection"] for leg in best[: min(size, MAX_LEGS)]}
