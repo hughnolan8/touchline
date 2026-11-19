@@ -32,6 +32,8 @@ Invalid bootstrap progress is identified by league and setting key, never by
 the stored value.
 Malformed stored match statistics are quarantined and rebuilt from the active
 provider record; logs identify the affected match only.
+An invalid Understat response is logged by league and skipped without advancing
+bootstrap progress, so the next engine cycle can retry it.
 
 For an on-demand investigation, ask a Codex agent for production support. It
 will inspect public health first and may use local Railway status/log access

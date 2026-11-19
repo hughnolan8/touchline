@@ -13,7 +13,11 @@ from backend.log import event
 def import_scores(at=None):
  at=at or now()
  with connect() as c:
-  count=sum(sync_seasons(c,league.code,[season_start(at)],include_rosters=False) for league in COMPETITIONS)
+  count=0
+  for league in COMPETITIONS:
+   try:count+=sync_seasons(c,league.code,[season_start(at)],include_rosters=False)
+   except json.JSONDecodeError:
+    event('understat_sync_failed',logging.WARNING,league=league.code,error_type='JSONDecodeError')
  event('understat_refresh_finished',records=count)
  return count
 def bootstrap(at=None):
@@ -27,7 +31,9 @@ def bootstrap(at=None):
     event('bootstrap_state_invalid',logging.ERROR,league=league.code,setting_key=key);raise
    next_season=next((season for season in seasons if season not in done),None)
    if next_season is None:continue
-   sync_seasons(c,league.code,[next_season],include_rosters=False)
+   try:sync_seasons(c,league.code,[next_season],include_rosters=False)
+   except json.JSONDecodeError:
+    event('understat_sync_failed',logging.WARNING,league=league.code,season=next_season,error_type='JSONDecodeError');return False
    set_setting(c,f'bootstrap_seasons:{league.code}',[*done,next_season])
    if next_season==year:set_setting(c,f'bootstrap_complete:{league.code}',at)
    return {'league':league.code,'season':next_season}

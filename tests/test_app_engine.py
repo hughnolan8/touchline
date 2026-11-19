@@ -57,6 +57,14 @@ def test_current_season_refresh_uses_understat(monkeypatch):
     assert calls == [(league, [2025]) for league in ('E0', 'SP1', 'D1', 'I1', 'F1')]
 
 
+def test_understat_json_failures_do_not_stop_the_engine(monkeypatch, capsys):
+    monkeypatch.setattr(engine, 'sync_seasons', lambda *_args, **_kwargs: (_ for _ in ()).throw(json.JSONDecodeError('bad', '', 0)))
+    assert engine.import_scores('2026-02-01T12:00:00+00:00') == 0
+    assert engine.bootstrap('2026-09-17T12:00:00+00:00') is False
+    output = capsys.readouterr().out
+    assert output.count('"event":"understat_sync_failed"') == 6
+
+
 def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monkeypatch):
     at = '2026-09-17T12:00:00+00:00'
     with connect() as connection:
