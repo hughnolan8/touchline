@@ -51,10 +51,10 @@ class MobileOdds:
   for league in {fixture['competition'] for fixture in fixtures}:
    info=competition(league);events,response=self._get(info.odds_sport,'/events',base,at);wanted=[]
    with connect() as c:
-    for event in events:
+    for odds_event in events:
      try:
-      home=canonical(c,'the-odds-api',event['home_team']);away=canonical(c,'the-odds-api',event['away_team']);kickoff=datetime.fromisoformat(event['commence_time'].replace('Z','+00:00'))
-      if any(m['competition']==league and m['home']==home and m['away']==away and abs((datetime.fromisoformat(m['kickoff'])-kickoff).total_seconds())<172800 for m in fixtures):wanted.append(event['id'])
+      home=canonical(c,'the-odds-api',odds_event['home_team']);away=canonical(c,'the-odds-api',odds_event['away_team']);kickoff=datetime.fromisoformat(odds_event['commence_time'].replace('Z','+00:00'))
+      if any(m['competition']==league and m['home']==home and m['away']==away and abs((datetime.fromisoformat(m['kickoff'])-kickoff).total_seconds())<172800 for m in fixtures):wanted.append(odds_event['id'])
      except (KeyError,TypeError,ValueError):continue
    payloads=[]
    for event_id in wanted:
