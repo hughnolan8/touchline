@@ -8,7 +8,9 @@ primary_region = 'lhr'
 
 [build]
 [env]
-  ODDS_MAX_REQUESTS_PER_DAY = '40'
+  # Free Odds API plan = 500 credits/month: 16/day x 31 days, no background refresh.
+  ODDS_MAX_REQUESTS_PER_DAY = '16'
+  ODDS_REFRESH_HOURS = '8760'
   TOUCHLINE_DB = '/data/touchline.sqlite3'
 
 [[mounts]]
