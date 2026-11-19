@@ -11,7 +11,8 @@ def client():
 
 def test_every_page_renders_on_an_empty_database():
     with client() as c:
-        for path in ("/", "/predictions", "/bets", "/engine", "/?league=E0", "/bets?league=XX"):
+        paths = ("/", "/predictions", "/accumulator", "/accumulator?auto=3&stake=x", "/bets")
+        for path in (*paths, "/engine", "/?league=E0", "/bets?league=XX"):
             response = c.get(path)
             assert response.status_code == 200, path
             assert "Touchline" in response.text
@@ -35,3 +36,15 @@ def test_admin_actions_require_token(monkeypatch):
         ok = c.post("/admin/refit", auth=("admin", "s3cret"), follow_redirects=False)
         assert ok.status_code == 303
         assert c.post("/admin/nope", auth=("admin", "s3cret")).status_code == 404
+
+
+def test_accumulator_prices_chosen_legs(monkeypatch):
+    monkeypatch.setenv("ODDS_API_KEY", "test")
+    monkeypatch.setattr("touchline.web.app.now", lambda: "2026-01-10T12:00:00+00:00")
+    scheduler.tick(AT, Fakes())
+    with client() as c:
+        empty = c.get("/accumulator").text
+        assert "Arsenal v Aston Villa" in empty
+        leg = {"leg.E0:arsenal-astonvilla:2026-01-10": "away", "stake": "5"}
+        priced = c.get("/accumulator", params=leg).text
+        assert "Returns on £5.00" in priced and 'value="away" checked' in priced

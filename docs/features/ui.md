@@ -1,11 +1,12 @@
 # Dashboard
 
-Files: `touchline/web/*`
+Files: `touchline/web/*`, `touchline/accumulator.py`
 
 | Page | Shows |
 |---|---|
 | Overview `/` | Balance, profit, ROI, win rate, max drawdown, open exposure, equity curve, recent bets |
 | Predictions `/predictions` | Next 7 days: model probabilities, best prices, best-edge outcome, decision |
+| Accumulator `/accumulator` | Pick one outcome per upcoming fixture and price the accumulator: combined odds, model chance, fair odds, edge, returns, expected profit, full-Kelly fraction |
 | Bets `/bets` | Every paper bet with odds, stake, edge, CLV, status, P&L |
 | Engine `/engine` | Per-league data and model freshness, odds credits, last ticks and errors, quarantine, admin actions |
 
@@ -15,3 +16,10 @@ Files: `touchline/web/*`
   They need `TOUCHLINE_ADMIN_TOKEN`; the browser asks for basic auth with any username and the
   token as the password.
 - **Health.** `/health` returns `{ok, scheduler, last_tick}` and is used by the Fly health check.
+- **Accumulator builder.** A calculator, not a bet: nothing is written to the paper ledger.
+  Only fixtures with both a forecast and odds are listed, each leg uses the best UK price,
+  and the model chance is the product of the legs' probabilities (legs treated as
+  independent, one per fixture, at most 12). "Best N value legs" fills in the N
+  highest-edge positive-value outcomes. The state lives in the query string
+  (`?leg.<match_id>=home&stake=10`, or `?auto=3`), so a built accumulator can be shared
+  as a link.

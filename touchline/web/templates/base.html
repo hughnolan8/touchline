@@ -12,7 +12,7 @@
     <a class="brand" href="/{{ '?league=' ~ league if league else '' }}">Touchline</a>
     <nav>
       {% set q = '?league=' ~ league if league else '' %}
-      {% for slug, label in [('', 'Overview'), ('predictions', 'Predictions'), ('bets', 'Bets'), ('engine', 'Engine')] %}
+      {% for slug, label in [('', 'Overview'), ('predictions', 'Predictions'), ('accumulator', 'Accumulator'), ('bets', 'Bets'), ('engine', 'Engine')] %}
       <a href="/{{ slug }}{{ q }}" {% if page == (slug or 'overview') %}aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>

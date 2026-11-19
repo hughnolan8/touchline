@@ -3,7 +3,7 @@
 import json
 import sqlite3
 
-from touchline import betting
+from touchline import accumulator, betting
 from touchline.db import get_setting, rows
 from touchline.jobs.ledger import stored_snapshot
 from touchline.jobs.modelling import latest_model, upcoming
@@ -73,6 +73,19 @@ def predictions(conn: sqlite3.Connection, league: str | None, at: str) -> list[d
             }
         )
     return out
+
+
+def accumulator_builder(
+    conn: sqlite3.Connection, league: str | None, at: str, chosen: dict[str, str], stake: float
+) -> dict:
+    """Upcoming priced fixtures plus the accumulator built from `{match_id: selection}`."""
+    fixtures = [f for f in predictions(conn, league, at) if accumulator.candidates(f)]
+    legs = accumulator.pick(fixtures, chosen)
+    return {
+        "fixtures": fixtures,
+        "chosen": {leg["match_id"]: leg["selection"] for leg in legs},
+        "acca": accumulator.combine(legs, stake),
+    }
 
 
 def engine(conn: sqlite3.Connection) -> dict:
