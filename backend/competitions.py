@@ -25,8 +25,5 @@ def competition(code):
         return BY_CODE[code]
     except KeyError:
         raise ValueError(f'Unsupported league: {code}') from None
-
-
 def name(code):
     return competition(code).name
-
