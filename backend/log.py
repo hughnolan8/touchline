@@ -12,4 +12,4 @@ def configure():
 
 
 def event(name, level=logging.INFO, **fields):
-    logging.getLogger('touchline').log(level, json.dumps({'event': name, **fields}, default=str, separators=(',', ':')))
+    print(json.dumps({'event': name, 'severity': logging.getLevelName(level).lower(), **fields}, default=str, separators=(',', ':')), flush=True)

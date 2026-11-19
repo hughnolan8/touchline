@@ -25,6 +25,10 @@ headers, provider URLs, and error messages are never logged, protecting
 deployment and provider credentials. Postgres is Railway-managed and retains
 its platform-managed database logs.
 
+Engine failure events also include the safe workflow phase and exception type,
+so operator logs identify the failing subsystem without exposing exception
+messages or stored data.
+
 For an on-demand investigation, ask a Codex agent for production support. It
 will inspect public health first and may use local Railway status/log access
 when available. Any deployment, restart, rollback, configuration change, or

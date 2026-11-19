@@ -57,9 +57,9 @@ def test_manual_refresh_rejects_an_existing_lease(monkeypatch):
     assert response.json()['detail'] == 'A refresh is already running'
 
 
-def test_api_logs_a_credential_safe_request_summary(caplog):
+def test_api_logs_a_credential_safe_request_summary(capsys):
     with TestClient(api.create_app(setup=False)) as client:
         assert client.get('/health?token=secret').status_code == 200
-    messages = [record.message for record in caplog.records]
-    assert any('"event":"api_request_finished"' in message and '"path":"/health"' in message for message in messages)
-    assert all('secret' not in message for message in messages)
+    output = capsys.readouterr().out
+    assert '"event":"api_request_finished"' in output and '"path":"/health"' in output
+    assert 'secret' not in output

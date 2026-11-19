@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from backend.app import engine
 from backend.app import api
 from backend.app.store import initialize
@@ -139,3 +143,12 @@ def test_engine_refresh_endpoint_waits_for_the_running_cycle(monkeypatch):
     with TestClient(api.create_app(setup=False)) as client:
         response = client.post('/api/v1/refresh-engine', headers={'X-Deployment-Refresh-Token': 'test-token'})
     assert response.status_code == 409
+
+
+def test_tick_logs_the_safe_phase_for_failures(monkeypatch, capsys):
+    monkeypatch.setattr(engine, 'bootstrap', lambda _: (_ for _ in ()).throw(json.JSONDecodeError('bad', '', 0)))
+    with pytest.raises(json.JSONDecodeError):
+        engine.tick('2026-09-17T12:00:00+00:00')
+    output = capsys.readouterr().out
+    assert '"event":"engine_tick_failed"' in output
+    assert '"phase":"bootstrap"' in output
