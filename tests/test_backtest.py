@@ -1,68 +1,21 @@
-from datetime import datetime, timedelta, timezone
-
-from backend.backtest import evaluate_candidate, summary, walk_forward, walk_forward_player
-from backend.playerstats import save_roster
-from backend.db import connect, dump, now
-from backend.providers import ingest_match
+from touchline.model import backtest
 
 
-def add_result(connection, number, home, away, home_goals, away_goals):
-    # Keep repeat fixtures more than the provider's two-day identity window apart.
-    kickoff = (datetime(2024, 1, 1, tzinfo=timezone.utc) + timedelta(days=number * 3)).isoformat()
-    ingest_match(connection, 'test', str(number), 'E0', home, away, kickoff, True, 'finished',
-                 {'hg': home_goals, 'ag': away_goals}, now())
+def test_walk_forward_never_sees_the_scored_result(results, monkeypatch):
+    seen = []
+    real_fit = backtest.dc.fit
+
+    def spy(records, cutoff, *args, **kwargs):
+        seen.append((cutoff, max(r["kickoff"] for r in records)))
+        return real_fit(records, cutoff, *args, **kwargs)
+
+    monkeypatch.setattr(backtest.dc, "fit", spy)
+    evaluations = backtest.walk_forward(results, minimum_samples=60, retrain_days=30)
+    assert evaluations and all(latest < cutoff for cutoff, latest in seen)
+    assert all(e["kickoff"] >= cutoff for e in evaluations for cutoff, _ in seen[:1])
 
 
-def test_walk_forward_uses_only_prior_results_and_reports_probability_metrics():
-    with connect() as connection:
-        for number in range(40):
-            add_result(connection, number, 'Arsenal', 'Chelsea', number % 3, (number + 1) % 2)
-        add_result(connection, 41, 'Arsenal', 'Chelsea', 2, 1)
-        evaluations = walk_forward(connection)
-    assert len(evaluations) == 1
-    assert evaluations[0]['id']
-    assert set(evaluations[0]['probabilities']) == {'home', 'draw', 'away'}
-    assert abs(sum(evaluations[0]['probabilities'].values()) - 1) < 1e-9
-    report = summary(evaluations)
-    assert report['fixtures'] == 1
-    assert 0 <= report['accuracy'] <= 1
-    assert report['log_loss'] >= 0
-    assert 0 <= report['brier_score'] <= 1
-
-
-def test_backtest_summary_handles_no_eligible_fixtures():
-    assert summary([])['fixtures'] == 0
-
-
-def test_candidate_evaluation_is_persisted_and_not_promotable_without_market_history():
-    with connect() as connection:
-        report = evaluate_candidate(connection)
-        row = connection.execute('SELECT model_version,eligible FROM model_evaluations').fetchone()
-    assert report['eligible'] is False
-    assert row['model_version'] == 'E0:xi-v2'
-    assert row['eligible'] == 0
-
-
-def test_walk_forward_reuses_models_for_simultaneous_fixtures(monkeypatch):
-    with connect() as connection:
-        for number in range(40):
-            add_result(connection, number, 'Arsenal', 'Chelsea', number % 3, (number + 1) % 2)
-        kickoff = (datetime(2025, 1, 1, tzinfo=timezone.utc)).isoformat()
-        ingest_match(connection, 'test', 'simultaneous-one', 'E0', 'Arsenal', 'Chelsea', kickoff, True, 'finished', {'hg': 1, 'ag': 0}, now())
-        ingest_match(connection, 'test', 'simultaneous-two', 'E0', 'Chelsea', 'Arsenal', kickoff, True, 'finished', {'hg': 0, 'ag': 1}, now())
-        evaluations = walk_forward(connection)
-    assert len(evaluations) == 2
-
-
-def test_player_walk_forward_uses_only_prior_match_player_stats():
-    def roster(prefix, xg):
-        return [{'player_id': f'{prefix}{n}', 'player_name': f'{prefix} player {n}', 'time': 90,
-                 'starter': True, 'xG': xg, 'xA': xg / 2, 'position': 'F'} for n in range(11)]
-    with connect() as connection:
-        for number in range(41):
-            add_result(connection, number, 'Arsenal', 'Chelsea', number % 3, (number + 1) % 2)
-            match = connection.execute('SELECT id FROM matches WHERE source_id=?', (str(number),)).fetchone()[0]
-            save_roster(connection, match, {'h': roster('a', .2), 'a': roster('c', .1)})
-        evaluations = walk_forward_player(connection)
-    assert len(evaluations) == 1
-    assert set(evaluations[0]['probabilities']) == {'home', 'draw', 'away'}
+def test_summary_metrics(results):
+    summary = backtest.summary(backtest.walk_forward(results, 60, 30))
+    assert summary["fixtures"] > 0 and 0 < summary["brier"] < 1
+    assert sum(summary["outcomes"].values()) == summary["fixtures"]

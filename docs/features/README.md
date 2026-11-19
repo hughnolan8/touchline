@@ -1,15 +1,9 @@
 # Feature guides
 
-- [Paper betting engine](paper-betting.md) — forecasts, odds checks, staking,
-  line-up gating, and settlement.
-- [Workflow and decision logic](workflow.md) — service boundaries, engine
-  timing, decision gates, and paper-ledger lifecycle.
-- [Railway operations](../operations.md) — production services and the
-  Understat cutover.
-- [Production support](production-support.md) — push-triggered public health
-  validation and read-only Codex diagnostics.
-- [CI/CD](ci-cd.md) — staging setup, release gates, promotion, and rollback.
+Each page starts with the files involved, so you can jump straight to the code.
 
-Add a guide here when a new capability has user, operator, or engineering
-behaviour worth maintaining. Update the matching page whenever that capability
-changes.
+- [Data sources](data-sources.md): Understat, The Odds API, FotMob, Pushover
+- [Model](model.md): Dixon–Coles baseline, confirmed-XI model, backtests, promotion
+- [Betting](betting.md): fixture windows, value, staking, closing line, settlement
+- [Dashboard](ui.md): pages and admin actions
+- [Deployment](deployment.md): Fly.io setup, deploys, rollback, secrets

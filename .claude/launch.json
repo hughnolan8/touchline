@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "touchline",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "touchline.web.app:app", "--port", "8000", "--reload"],
+      "env": {"TOUCHLINE_SCHEDULER": "0", "TOUCHLINE_DB": "data/demo.sqlite3"},
+      "port": 8000
+    }
+  ]
+}

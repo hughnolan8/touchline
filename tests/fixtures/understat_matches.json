@@ -1,0 +1,7 @@
+[
+  {"id": "100", "isResult": true, "h": {"title": "Arsenal"}, "a": {"title": "Chelsea"},
+   "goals": {"h": "2", "a": "1"}, "datetime": "2026-02-01 15:00:00"},
+  {"id": "101", "isResult": false, "h": {"title": "Manchester United"},
+   "a": {"title": "Arsenal"}, "goals": {"h": null, "a": null},
+   "datetime": "2026-03-01 15:00:00"}
+]

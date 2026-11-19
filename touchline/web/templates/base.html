@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Touchline · {{ page | title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+</head>
+<body hx-boost="true">
+  <header class="top">
+    <a class="brand" href="/{{ '?league=' ~ league if league else '' }}">Touchline</a>
+    <nav>
+      {% set q = '?league=' ~ league if league else '' %}
+      {% for slug, label in [('', 'Overview'), ('predictions', 'Predictions'), ('bets', 'Bets'), ('engine', 'Engine')] %}
+      <a href="/{{ slug }}{{ q }}" {% if page == (slug or 'overview') %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <form method="get" class="league">
+      <label for="league" class="sr-only">League</label>
+      <select id="league" name="league" onchange="this.form.requestSubmit()">
+        <option value="">All leagues</option>
+        {% for lg in leagues %}
+        <option value="{{ lg.code }}" {% if lg.code == league %}selected{% endif %}>{{ lg.name }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button>Filter</button></noscript>
+    </form>
+  </header>
+  <main id="content">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="muted">Paper betting only. No real money is staked.</footer>
+</body>
+</html>

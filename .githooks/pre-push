@@ -1,4 +1,0 @@
-#!/usr/bin/env sh
-set -eu
-
-.pythonenv/bin/python -m pytest -q
