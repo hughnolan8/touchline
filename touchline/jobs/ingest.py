@@ -1,15 +1,16 @@
-"""Pull data from sources into SQLite: fixtures/results, rosters, odds and confirmed XIs."""
+"""Pull data into SQLite: football-data fixtures/results, Understat rosters, FotMob XIs."""
 
 import logging
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from touchline.db import connect, dump, quarantine, rows, set_setting, utc
-from touchline.sources import fotmob, understat
+from touchline.sources import football_data, fotmob, understat
 from touchline.teams import canonical
 from touchline.types import Fixture
 
 log = logging.getLogger(__name__)
+SOURCE = "football-data"
 
 
 def find_match(conn, league: str, home: str, away: str, kickoff: str) -> str | None:
@@ -29,59 +30,62 @@ def find_match(conn, league: str, home: str, away: str, kickoff: str) -> str | N
     return near[0] if len(near) == 1 else None
 
 
-def insert_match(
-    conn, league: str, home: str, away: str, kickoff: str, at: str, understat_id: str | None = None
-) -> str:
+def insert_match(conn, league: str, home: str, away: str, kickoff: str, at: str) -> str:
     match_id = f"{league}:{home}-{away}:{kickoff[:10]}"
     conn.execute(
-        "INSERT INTO matches(id, league, understat_id, home, away, kickoff, status, "
-        "updated_at) VALUES(?,?,?,?,?,?,'scheduled',?)",
-        (match_id, league, understat_id, home, away, kickoff, at),
+        "INSERT OR IGNORE INTO matches(id, league, home, away, kickoff, status, updated_at) "
+        "VALUES(?,?,?,?,?,'scheduled',?)",
+        (match_id, league, home, away, kickoff, at),
     )
     return match_id
 
 
 def store_fixture(conn: sqlite3.Connection, f: Fixture, at: str) -> str | None:
-    """Upsert one Understat fixture/result, adopting an Odds-API-only fixture if one exists."""
+    """Upsert one football-data fixture/result, adopting a scheduled fixture within 48 h."""
     if f.finished and f.kickoff > at:
-        quarantine(conn, "understat", "result before kickoff", f.__dict__)
+        quarantine(conn, SOURCE, "result before kickoff", f.__dict__)
         return None
-    home, away = canonical(conn, "understat", f.home), canonical(conn, "understat", f.away)
+    home, away = canonical(conn, SOURCE, f.home), canonical(conn, SOURCE, f.away)
     if home == away:
-        quarantine(conn, "understat", "home and away identical", f.__dict__)
+        quarantine(conn, SOURCE, "home and away identical", f.__dict__)
         return None
-    row = conn.execute("SELECT id FROM matches WHERE understat_id=?", (f.source_id,)).fetchone()
-    match_id = row[0] if row else find_match(conn, f.league, home, away, f.kickoff)
-    if not match_id:
-        match_id = insert_match(conn, f.league, home, away, f.kickoff, at, f.source_id)
+    match_id = find_match(conn, f.league, home, away, f.kickoff) or insert_match(
+        conn, f.league, home, away, f.kickoff, at
+    )
     conn.execute(
-        "UPDATE matches SET understat_id=?, kickoff=?, status=?, hg=?, ag=?, updated_at=? "
-        "WHERE id=?",
-        (
-            f.source_id,
-            f.kickoff,
-            "finished" if f.finished else "scheduled",
-            f.hg,
-            f.ag,
-            at,
-            match_id,
-        ),
+        "UPDATE matches SET kickoff=?, status=?, hg=?, ag=?, updated_at=? WHERE id=?",
+        (f.kickoff, "finished" if f.finished else "scheduled", f.hg, f.ag, at, match_id),
     )
     return match_id
 
 
-def sync_league(league: str, seasons, at: str, fetch=understat.fetch_season) -> int:
-    count = 0
-    for season in seasons:
-        payload = fetch(league, season)
-        with connect() as conn:
-            for raw in payload:
-                try:
-                    if store_fixture(conn, understat.parse_match(raw, league), at):
-                        count += 1
-                except (KeyError, TypeError, ValueError) as error:
-                    quarantine(conn, "understat", str(error), raw)
-            set_setting(conn, f"synced:{league}", at)
+def _store(fixtures: list[Fixture], rejected: list[dict], at: str) -> int:
+    with connect() as conn:
+        for raw in rejected:
+            quarantine(conn, SOURCE, "unparseable row", raw)
+        return sum(bool(store_fixture(conn, f, at)) for f in fixtures)
+
+
+def sync_results(league: str, seasons, at: str, fetch=football_data.fetch_results) -> int:
+    """Import season results; fixtures still unplayed 3 days after kick-off become postponed."""
+    count = sum(_store(*fetch(league, season), at) for season in seasons)
+    stale = (datetime.fromisoformat(at) - timedelta(days=3)).isoformat()
+    with connect() as conn:
+        conn.execute(
+            "UPDATE matches SET status='postponed', updated_at=? WHERE league=? AND "
+            "status='scheduled' AND kickoff<?",
+            (at, league, stale),
+        )
+        set_setting(conn, f"synced:{league}", at)
+    return count
+
+
+def sync_fixtures(at: str, fetch=football_data.fetch_fixtures) -> int:
+    """Next week's fixtures for every league (one request)."""
+    fixtures, rejected = fetch()
+    count = _store([f for f in fixtures if not f.finished and f.kickoff > at], rejected, at)
+    with connect() as conn:
+        set_setting(conn, "synced:fixtures", at)
     return count
 
 
@@ -90,8 +94,8 @@ def hydrate_rosters(limit: int, fetch=understat.fetch_roster) -> int:
     with connect() as conn:
         pending = rows(
             conn,
-            "SELECT id, home, away FROM matches m WHERE status='finished' "
-            "AND NOT EXISTS (SELECT 1 FROM player_match_stats p "
+            "SELECT id, understat_id, home, away FROM matches m WHERE status='finished' "
+            "AND understat_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM player_match_stats p "
             "WHERE p.match_id=m.id) ORDER BY kickoff DESC LIMIT ?",
             (limit,),
         )

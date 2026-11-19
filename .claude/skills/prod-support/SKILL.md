@@ -16,7 +16,7 @@ database without the user's explicit approval.
 3. **Fly.** `fly status`, then `fly logs --no-tail | tail -200`. Tick lines read
    `tick {...}`, and provider failures read `<step> failed: ...`.
 4. **Common causes.**
-   - Understat or FotMob changed shape (a parser error in `sources/`).
+   - football-data.co.uk or FotMob changed shape (a parser error in `sources/`).
    - Odds credits exhausted or the daily cap hit.
    - A new team spelling.
    - The volume is full (`fly ssh console -C "df -h /data"`).

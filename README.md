@@ -1,7 +1,7 @@
 # Touchline
 
 Paper-betting automator for the Premier League, La Liga, Bundesliga, Serie A and Ligue 1.
-It pulls results and xG from Understat, UK 1X2 odds from The Odds API and confirmed XIs from
+It pulls fixtures and results from football-data.co.uk, UK 1X2 odds from The Odds API and confirmed XIs from
 FotMob, forecasts every fixture with a Dixon–Coles model, and places quarter-Kelly **paper**
 bets (no real money) shortly before kick-off. A web dashboard shows the bankroll, forecasts,
 bets and engine health.

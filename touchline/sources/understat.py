@@ -1,35 +1,13 @@
-"""Understat via understatapi: fixtures, results and per-match player rosters."""
+"""Understat via understatapi: per-match player rosters (xG/xA) for the XI model.
 
-from datetime import UTC, datetime
+As of Nov 2026 Understat's AJAX API returns HTML errors, so rosters are unavailable.
+"""
 
 from understatapi import UnderstatClient
 
-from touchline.leagues import league
-from touchline.types import Fixture, PlayerStat
+from touchline.types import PlayerStat
 
 TIMEOUT = 30
-
-
-def season_start(at: str) -> int:
-    """Start year of the European season containing `at` (seasons start in July)."""
-    value = datetime.fromisoformat(at)
-    return value.year if value.month >= 7 else value.year - 1
-
-
-def parse_match(raw: dict, league_code: str) -> Fixture:
-    finished = bool(raw.get("isResult"))
-    kickoff = datetime.strptime(raw["datetime"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-    goals = raw.get("goals") or {}
-    return Fixture(
-        source_id=str(raw["id"]),
-        league=league_code,
-        home=raw["h"]["title"],
-        away=raw["a"]["title"],
-        kickoff=kickoff.isoformat(timespec="seconds"),
-        finished=finished,
-        hg=int(goals["h"]) if finished else None,
-        ag=int(goals["a"]) if finished else None,
-    )
 
 
 def _number(value) -> float:
@@ -67,12 +45,6 @@ def parse_roster(raw: dict) -> list[PlayerStat]:
                 )
             )
     return stats
-
-
-def fetch_season(league_code: str, season: int, client_factory=UnderstatClient) -> list[dict]:
-    with client_factory() as client:
-        endpoint = client.league(league=league(league_code).understat)
-        return endpoint.get_match_data(season=str(season), timeout=TIMEOUT)
 
 
 def fetch_roster(match_source_id: str, client_factory=UnderstatClient) -> dict:

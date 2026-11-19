@@ -5,7 +5,7 @@ Per fixture (minutes before kickoff, from the league's Strategy):
                                 decide as soon as the XI is confirmed
   decide_cutoff..0              record "missed" if no decision was possible
   close_minutes..0              refresh odds and store the closing line for placed bets
-  after full time               settle once Understat reports the score
+  after full time               settle once football-data reports the score
 """
 
 import json
@@ -19,7 +19,7 @@ from touchline.config import config
 from touchline.db import connect, get_setting, job_run, minutes_until, now, rows
 from touchline.jobs import ingest, ledger, modelling, odds
 from touchline.leagues import LEAGUES
-from touchline.sources import fotmob, odds_api, understat
+from touchline.sources import football_data, fotmob, odds_api, understat
 
 log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -32,7 +32,8 @@ SYNC_HOURS = 6
 class Sources:
     """Injectable source functions so tests run the real tick with fakes."""
 
-    fetch_season: object = understat.fetch_season
+    fetch_results: object = football_data.fetch_results
+    fetch_fixtures: object = football_data.fetch_fixtures
     fetch_roster: object = understat.fetch_roster
     fetch_odds: object = odds_api.fetch
     fotmob: object = fotmob.FotMob
@@ -55,28 +56,32 @@ def _step(src: Sources, name: str, fn, *args):
 
 
 def _sync(src: Sources, at: str) -> int:
-    season = understat.season_start(at)
+    """Results per league every SYNC_HOURS (every 30 min while a fixture is overdue)."""
+    season = football_data.season_start(at)
+    overdue_cutoff = (datetime.fromisoformat(at) - timedelta(hours=2)).isoformat()
     total = 0
+    with connect() as conn:
+        fixtures_synced = get_setting(conn, "synced:fixtures")
+    if _older(fixtures_synced, at, SYNC_HOURS):
+        total += _step(src, "fixtures", ingest.sync_fixtures, at, src.fetch_fixtures) or 0
     for lg in LEAGUES:
         with connect() as conn:
             last = get_setting(conn, f"synced:{lg.code}")
             overdue = conn.execute(
                 "SELECT 1 FROM matches WHERE league=? AND status='scheduled' AND kickoff<?",
-                (lg.code, (datetime.fromisoformat(at) - timedelta(hours=2)).isoformat()),
+                (lg.code, overdue_cutoff),
             ).fetchone()
         if _older(last, at, SYNC_HOURS) or (overdue and _older(last, at, 0.5)):
-            total += (
-                _step(
-                    src,
-                    f"sync {lg.code}",
-                    ingest.sync_league,
-                    lg.code,
-                    [season],
-                    at,
-                    src.fetch_season,
-                )
-                or 0
+            synced = _step(
+                src,
+                f"results {lg.code}",
+                ingest.sync_results,
+                lg.code,
+                [season],
+                at,
+                src.fetch_results,
             )
+            total += synced or 0
     return total
 
 

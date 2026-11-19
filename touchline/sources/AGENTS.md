@@ -7,5 +7,5 @@
   When recording a new payload, keep only the fields the parser reads.
 - The Odds API costs 1 credit per league request (`/odds`, region uk, market h2h). The daily
   cap is enforced in `jobs/odds.py` (`ODDS_MAX_REQUESTS_PER_DAY`).
-- FotMob and Understat are unofficial and can change shape; failures are caught per step by
+- football-data.co.uk, FotMob and Understat are free/unofficial and can change shape; failures are caught per step by
   the scheduler and shown on the Engine page.

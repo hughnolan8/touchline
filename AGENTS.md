@@ -1,6 +1,6 @@
 # Touchline — agent guide
 
-Paper-betting automator: Understat + Odds API + FotMob → Dixon–Coles → paper bets → web UI.
+Paper-betting automator: football-data.co.uk + Odds API + FotMob → Dixon–Coles → paper bets → web UI.
 One Python 3.12 process (FastAPI + in-process scheduler) on SQLite, deployed to Fly.io.
 
 ## Module map (read only what your change touches)
@@ -15,7 +15,7 @@ One Python 3.12 process (FastAPI + in-process scheduler) on SQLite, deployed to 
 | `touchline/betting.py` | Pure maths: devig, consensus, edge, Kelly, settle, account |
 | `touchline/model/` | Dixon–Coles fit/predict, XI features, backtest (pure) |
 | `touchline/sources/` | Provider clients: return dataclasses, never touch the DB |
-| `touchline/jobs/` | `ingest` (Understat/FotMob → DB), `odds`, `modelling` (fit/predict), `ledger` (bets) |
+| `touchline/jobs/` | `ingest` (football-data/Understat/FotMob → DB), `odds`, `modelling` (fit/predict), `ledger` (bets) |
 | `touchline/scheduler.py` | The 5-minute tick and its fixture windows |
 | `touchline/web/` | Routes, read queries, Jinja templates, CSS |
 | `touchline/cli.py` | `touchline backfill/backtest/promote/odds/tick/reset` |

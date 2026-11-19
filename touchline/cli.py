@@ -9,7 +9,7 @@ from touchline.db import connect, now, set_setting
 from touchline.jobs import ingest, modelling, odds
 from touchline.leagues import BY_CODE, LEAGUES
 from touchline.model import backtest
-from touchline.sources import understat
+from touchline.sources import football_data
 
 PROMOTION_MIN_PROSPECTIVE = 200
 
@@ -20,10 +20,15 @@ def _leagues(code: str | None) -> list[str]:
 
 def backfill(args) -> None:
     at = now()
-    current = understat.season_start(at)
+    current = football_data.season_start(at)
     seasons = range(current - args.seasons + 1, current + 1)
+    print(f"fixtures: {ingest.sync_fixtures(at)} upcoming")
     for code in _leagues(args.league):
-        print(f"{code}: {ingest.sync_league(code, seasons, at)} fixtures")
+        try:
+            print(f"{code}: {ingest.sync_results(code, seasons, at)} results")
+        except football_data.FootballDataError as error:
+            print(f"{code}: skipped ({error})")
+            continue
         if args.rosters:
             while done := ingest.hydrate_rosters(200):
                 print(f"{code}: +{done} rosters")
@@ -102,7 +107,11 @@ def main(argv=None) -> None:
     p = sub.add_parser("backfill", help="import seasons of results, fit models")
     p.add_argument("--league", **league_arg)
     p.add_argument("--seasons", type=int, default=4)
-    p.add_argument("--rosters", action="store_true", help="also fetch player rosters (slow)")
+    p.add_argument(
+        "--rosters",
+        action="store_true",
+        help="also fetch Understat player rosters (slow; currently unavailable)",
+    )
     p.set_defaults(fn=backfill)
 
     p = sub.add_parser("backtest", help="walk-forward log loss / Brier")

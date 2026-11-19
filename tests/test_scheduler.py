@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from tests.conftest import make_results
 from touchline import scheduler
 from touchline.db import connect, rows
-from touchline.types import Lineup, OddsEvent, Quote
+from touchline.types import Fixture, Lineup, OddsEvent, Quote
 
 NAMES = {
     "arsenal": "Arsenal",
@@ -17,16 +17,17 @@ AT = "2026-01-10T14:10:00+00:00"
 KICKOFF = "2026-01-10T15:00:00+00:00"
 
 
-def understat_raw(result, finished=True):
-    kickoff = datetime.fromisoformat(result["kickoff"]).strftime("%Y-%m-%d %H:%M:%S")
-    return {
-        "id": result["id"].split(":")[1],
-        "isResult": finished,
-        "h": {"title": NAMES[result["home"]]},
-        "a": {"title": NAMES[result["away"]]},
-        "goals": {"h": str(result["hg"]), "a": str(result["ag"])} if finished else {},
-        "datetime": kickoff,
-    }
+def fixture(result, finished=True):
+    return Fixture(
+        "",
+        "E0",
+        NAMES[result["home"]],
+        NAMES[result["away"]],
+        result["kickoff"],
+        finished,
+        result["hg"] if finished else None,
+        result["ag"] if finished else None,
+    )
 
 
 class Fakes(scheduler.Sources):
@@ -40,9 +41,12 @@ class Fakes(scheduler.Sources):
             "hg": final_score and final_score[0],
             "ag": final_score and final_score[1],
         }
-        season = [understat_raw(r) for r in make_results(end="2026-01-05T15:00:00+00:00")]
-        season.append(understat_raw(upcoming, finished=bool(final_score)))
-        self.fetch_season = lambda league, year: season if league == "E0" else []
+        season = [fixture(r) for r in make_results(end="2026-01-05T15:00:00+00:00")]
+        if final_score:
+            season.append(fixture(upcoming))
+        week = [] if final_score else [fixture(upcoming, finished=False)]
+        self.fetch_results = lambda league, year: (season, []) if league == "E0" else ([], [])
+        self.fetch_fixtures = lambda: (week, [])
         self.fetch_roster = lambda match_id: {"h": {}, "a": {}}
         self.odds_calls = []
 
@@ -112,19 +116,27 @@ def test_closing_line_and_settlement(monkeypatch):
     assert bet["status"] == "won" and bet["profit"] == 60.0 and bet["clv"] > 0
 
 
-def test_odds_api_supplies_fixtures_when_understat_is_down(monkeypatch):
+def test_odds_api_supplies_fixtures_when_results_source_has_none(monkeypatch):
     monkeypatch.setenv("ODDS_API_KEY", "test")
     down = Fakes()
-    season = down.fetch_season("E0", 2025)
-    down.fetch_season = lambda league, year: [r for r in season if r["id"] != "999"]
+    down.fetch_fixtures = lambda: ([], [])
     scheduler.tick(AT, down)
     with connect() as conn:
-        fixture = rows(conn, "SELECT * FROM matches WHERE status='scheduled'")
-    assert len(fixture) == 1 and fixture[0]["understat_id"] is None
+        fixture_rows = rows(conn, "SELECT * FROM matches WHERE status='scheduled'")
+    assert len(fixture_rows) == 1
     later = "2026-01-10T17:30:00+00:00"
-    scheduler.tick(later, Fakes(final_score=(2, 0)))  # Understat back: adopts the fixture
+    scheduler.tick(later, Fakes(final_score=(2, 0)))  # the result adopts the same fixture
     with connect() as conn:
-        match = rows(conn, "SELECT * FROM matches WHERE id=?", (fixture[0]["id"],))[0]
+        match = rows(conn, "SELECT * FROM matches WHERE id=?", (fixture_rows[0]["id"],))[0]
         bets = rows(conn, "SELECT status FROM bets")
-    assert match["understat_id"] == "999" and match["status"] == "finished"
-    assert bets == [{"status": "won"}]
+    assert match["status"] == "finished" and bets == [{"status": "won"}]
+
+
+def test_unplayed_fixture_is_postponed_and_its_bet_voided(monkeypatch):
+    monkeypatch.setenv("ODDS_API_KEY", "test")
+    scheduler.tick(AT, Fakes())
+    days_later = "2026-01-14T12:00:00+00:00"
+    assert scheduler.tick(days_later, Fakes())["settled"] == 1
+    with connect() as conn:
+        bet = rows(conn, "SELECT status, profit FROM bets")[0]
+    assert bet == {"status": "void", "profit": 0}
