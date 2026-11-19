@@ -62,7 +62,7 @@ The repository remote is GitHub. Production deploys only from `main`; Railway bu
 
 ## Understat cutover
 
-The engine bootstraps the active season and the prior three seasons for every supported league from Understat. It refreshes active seasons on manual refresh and while settling overdue bets; The Odds API remains the only source of 1X2 prices. Its daily request cap is shared across all leagues and should be sized accordingly.
+The engine bootstraps the active season and the prior three seasons for every supported league from Understat. It refreshes active seasons on manual refresh and while settling overdue bets. If Understat leaves the seven-day fixture window empty, The Odds API supplies one daily fallback schedule refresh as well as the 1X2 prices. Its daily request cap is shared across all leagues and should be sized accordingly.
 
 For the one-time datasource cutover, first deploy the updated engine so the reset command is present in its image. Then reset the Railway football, model, prediction, and paper-ledger data from inside that engine service:
 

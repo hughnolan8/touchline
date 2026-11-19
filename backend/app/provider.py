@@ -6,7 +6,7 @@ import httpx
 
 from backend.db import connect,now,set_setting,setting
 from backend.odds_api import OddsApiError,parse_events
-from backend.competitions import competition
+from backend.competitions import COMPETITIONS,competition
 from backend.providers import canonical
 from .store import transaction
 from backend.log import event
@@ -44,6 +44,15 @@ class MobileOdds:
    return response.json(),response
   except (httpx.HTTPError,ValueError) as error:
    event('odds_api_request_failed',logging.WARNING,sport=sport,path=path,error_type=type(error).__name__);raise OddsApiError('Odds API request failed') from None
+ def schedule(self,at=None):
+  if not odds_api_configured():raise OddsApiError('TOUCHLINE_ODDS_API_KEY is not configured')
+  at=at or now();base={'apiKey':odds_api_key(),'dateFormat':'iso'};count=0;response=None
+  for info in COMPETITIONS:
+   events,response=self._get(info.odds_sport,'/events',base,at)
+   with connect() as c:count+=parse_events(c,[{**odds_event,'sport_key':info.odds_sport} for odds_event in events],at,info.code)
+  with connect() as c:set_setting(c,'odds_api_quota',{'remaining':response.headers.get('x-requests-remaining') if response else None,'checked_at':now()})
+  event('odds_schedule_finished',fixtures=count)
+  return count
  def refresh(self,fixtures,at=None):
   key=odds_api_key()
   if not odds_api_configured():raise OddsApiError('TOUCHLINE_ODDS_API_KEY is not configured')

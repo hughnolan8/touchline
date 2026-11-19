@@ -10,6 +10,23 @@ from .fotmob import FotMobLineups
 from .notifications import deliver_pending_bet_notifications,deliver_pending_fixture_notifications,queue_fixture_notification
 from .store import acquire,release
 from backend.log import event
+def _scheduled_fixtures(at):
+ with connect() as c:upcoming=matches(c,at=at)
+ if upcoming:return upcoming
+ day=at[:10]
+ with connect() as c:
+  if setting(c,'odds_schedule_fallback')==day:return []
+ token=acquire('odds-schedule-fallback',seconds=300)
+ if not token:return []
+ try:
+  with connect() as c:upcoming=matches(c,at=at)
+  if upcoming:return upcoming
+  odds=MobileOdds()
+  try:odds.schedule(at)
+  finally:odds.close()
+  with connect() as c:set_setting(c,'odds_schedule_fallback',day);upcoming=matches(c,at=at)
+  return upcoming
+ finally:release('odds-schedule-fallback',token)
 def import_scores(at=None):
  at=at or now()
  with connect() as c:
@@ -40,8 +57,8 @@ def bootstrap(at=None):
  return False
 def refresh_all(at=None):
  at=at or now();bootstrap(at);import_scores(at)
+ upcoming=_scheduled_fixtures(at)
  with connect() as c:
-  upcoming=matches(c,at=at)
   for league in COMPETITIONS:train(c,at,league.code);train_player(c,at,league.code)
  odds=MobileOdds()
  try:count=odds.refresh(upcoming,at)
@@ -122,6 +139,7 @@ def tick(at=None,token=None):
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
   if open_bets:
    phase='score_import';import_scores(at)
+  phase='fixture_schedule';_scheduled_fixtures(at)
   # The initial entry market is captured once in the 55-60 minute window.
   # It remains the paper-bet price even if the confirmed XI arrives later.
   with connect() as c:
