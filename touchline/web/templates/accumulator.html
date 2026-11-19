@@ -15,7 +15,7 @@
 <section class="card">
   <h2>Build an accumulator{% if league %} · {{ league_names[league] }}{% endif %}</h2>
   <p class="actions">
-    {% for n in [2, 3, 4] %}<a class="chip" href="/accumulator?auto={{ n }}{{ q }}">Best {{ n }} value legs</a>{% endfor %}
+    {% for n in [2, 3, 4] %}<a class="chip" href="/accumulator?auto={{ n }}{{ q }}" title="The {{ n }} most likely legs that still have value">Best {{ n }} value legs</a>{% endfor %}
     <a class="chip" href="/accumulator{{ '?league=' ~ league if league else '' }}">Clear</a>
   </p>
   {% if fixtures %}

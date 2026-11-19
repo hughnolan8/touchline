@@ -55,6 +55,10 @@ def test_pick_keeps_only_priced_choices():
     assert [(leg["match_id"], leg["selection"]) for leg in legs] == [("a", "home"), ("c", "away")]
 
 
-def test_suggest_takes_best_positive_edges_one_per_fixture():
-    assert accumulator.suggest(FIXTURES, 5) == {"c": "away", "a": "home"}
-    assert accumulator.suggest(FIXTURES, 1) == {"c": "away"}
+def test_suggest_prefers_model_chance_then_edge_among_value_legs():
+    # e: favourite 70% at 1.5 (+5%) beats the bigger-edge outsider 20% at 6.0 (+20%).
+    e = fixture("e", (0.7, 0.1, 0.2), (1.5, 9.0, 6.0))
+    suggested = accumulator.suggest([*FIXTURES, e], 5)
+    # 70% first; a and c tie on 50%, so the higher edge (c, +25%) goes first; b has no value.
+    assert list(suggested.items()) == [("e", "home"), ("c", "away"), ("a", "home")]
+    assert accumulator.suggest([*FIXTURES, e], 1) == {"e": "home"}
