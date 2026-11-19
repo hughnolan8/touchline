@@ -5,6 +5,11 @@ Files: `Dockerfile`, `fly.toml`, `.github/workflows/deploy.yml`
 There is one machine in `lhr`, running the web UI and scheduler on SQLite, with the
 `touchline_data` volume mounted at `/data`. Auto-stop is off so the scheduler keeps running.
 
+The machine is a shared-cpu-1x with 256MB plus 512MB of disk swap. That keeps the monthly bill
+(about $3) under Fly's $5 waiver for personal organisations. The app peaks around 150MB including
+a full refit; the swap covers a second process such as `touchline backfill` run over SSH. Fly has
+no spending cap, so adding machines, memory or a dedicated IPv4 will start to cost money.
+
 ## First-time setup (run once by a human)
 
 ```bash
