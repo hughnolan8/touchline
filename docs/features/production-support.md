@@ -16,6 +16,15 @@ cannot repair production.
 Update the public URL in the GitHub Actions workflow if the Railway domain
 changes.
 
+## Service logs
+
+The API and engine emit compact JSON events to Railway logs. They record API
+method, path, status and duration; service lifecycle; engine-cycle outcomes;
+provider request failures; and refresh jobs. Query strings, request bodies,
+headers, provider URLs, and error messages are never logged, protecting
+deployment and provider credentials. Postgres is Railway-managed and retains
+its platform-managed database logs.
+
 For an on-demand investigation, ask a Codex agent for production support. It
 will inspect public health first and may use local Railway status/log access
 when available. Any deployment, restart, rollback, configuration change, or

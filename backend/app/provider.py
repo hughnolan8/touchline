@@ -9,6 +9,7 @@ from backend.odds_api import OddsApiError,parse_events
 from backend.competitions import competition
 from backend.providers import canonical
 from .store import transaction
+from backend.log import event
 
 
 def odds_api_key():
@@ -41,7 +42,8 @@ class MobileOdds:
   try:
    response=self.client.get(f'https://api.the-odds-api.com/v4/sports/{sport}{path}',params=params);response.raise_for_status()
    return response.json(),response
-  except (httpx.HTTPError,ValueError):raise OddsApiError('Odds API request failed') from None
+  except (httpx.HTTPError,ValueError) as error:
+   event('odds_api_request_failed',logging.WARNING,sport=sport,path=path,error_type=type(error).__name__);raise OddsApiError('Odds API request failed') from None
  def refresh(self,fixtures,at=None):
   key=odds_api_key()
   if not odds_api_configured():raise OddsApiError('TOUCHLINE_ODDS_API_KEY is not configured')
@@ -64,5 +66,5 @@ class MobileOdds:
   observed=now()
   with connect() as c:
    set_setting(c,'odds_api_quota',{'remaining':response.headers.get('x-requests-remaining') if response else None,'checked_at':observed});set_setting(c,'last_odds_refresh',observed)
-  logging.info('odds_refresh requested=%s matched=%s fixtures=%s',len(fixtures),matched,count)
+  event('odds_refresh_finished',requested=len(fixtures),matched=matched,fixtures=count)
   return count

@@ -6,6 +6,8 @@ import httpx
 from backend.db import connect
 from backend.playerstats import save_lineup_snapshot
 from backend.providers import canonical
+from backend.log import event
+import logging
 
 
 class FotMobError(Exception):
@@ -27,6 +29,7 @@ class FotMobLineups:
             response.raise_for_status()
             return response.json()
         except (httpx.HTTPError, ValueError) as error:
+            event('fotmob_request_failed', logging.WARNING, path=path, error_type=type(error).__name__)
             raise FotMobError('FotMob request failed') from error
 
     @staticmethod
@@ -93,4 +96,5 @@ class FotMobLineups:
             with connect() as c:
                 if save_lineup_snapshot(c, fixture['id'], 'fotmob', match_id, lineups, at):
                     captured.append(fixture['id'])
+        event('fotmob_lineups_finished', requested=len(fixtures), captured=len(captured))
         return captured

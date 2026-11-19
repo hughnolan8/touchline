@@ -1,5 +1,4 @@
 """One five-minute worker for every supported league; no queue or trainer service."""
-import logging
 from backend.db import connect,now,setting,set_setting
 from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
@@ -9,11 +8,12 @@ from .provider import MobileOdds,odds_api_configured
 from .fotmob import FotMobLineups
 from .notifications import deliver_pending_bet_notifications,deliver_pending_fixture_notifications,queue_fixture_notification
 from .store import acquire,release
+from backend.log import event
 def import_scores(at=None):
  at=at or now()
  with connect() as c:
   count=sum(sync_seasons(c,league.code,[season_start(at)],include_rosters=False) for league in COMPETITIONS)
- logging.info('understat_refresh records=%s',count)
+ event('understat_refresh_finished',records=count)
  return count
 def bootstrap(at=None):
  at=at or now()
@@ -49,20 +49,21 @@ def refresh_all(at=None):
    placed.append(place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable')
   set_setting(c,'last_manual_refresh',at)
  result={'fixtures':count,'decisions':placed,'notified':deliver_pending_bet_notifications(),'settled':settle(at)}
- logging.info('manual_refresh fixtures=%s decisions=%s settled=%s',count,len(placed),result['settled'])
+ event('manual_refresh_finished',fixtures=count,decisions=len(placed),settled=result['settled'])
  return result
 def refresh_missing_odds(at=None):
  at=at or now()
  with connect() as c:
   missing=[m for m in matches(c,at=at) if not best_market(c,m['id'])]
- if not missing:return {'requested':0,'fixtures':0,'still_missing':0}
+ if not missing:
+  event('missing_odds_refresh_finished',requested=0,fixtures=0,still_missing=0);return {'requested':0,'fixtures':0,'still_missing':0}
  odds=MobileOdds()
  try:count=odds.refresh(missing,at)
  finally:odds.close()
  with connect() as c:
   remaining=sum(not bool(best_market(c,m['id'])) for m in missing)
   set_setting(c,'last_missing_odds_refresh',at)
- return {'requested':len(missing),'fixtures':count,'still_missing':remaining}
+ result={'requested':len(missing),'fixtures':count,'still_missing':remaining};event('missing_odds_refresh_finished',**result);return result
 def _capture_lineups(fixtures,at):
  if not fixtures:return []
  lineups=FotMobLineups()
@@ -93,14 +94,16 @@ def _place_confirmed(fixtures,captured,at):
  return results
 def tick(at=None,token=None):
  at=at or now();token=token or acquire('engine',seconds=290)
- if not token:return {'ok':True,'skipped':True}
+ if not token:
+  event('engine_cycle_skipped',reason='lease_held');return {'ok':True,'skipped':True}
+ event('engine_tick_started',at=at)
  try:
   with connect() as c:set_setting(c,'odds_api_engine_configured',odds_api_configured())
   bootstrapping=bootstrap(at)
   if bootstrapping:
    with connect() as c:
     train(c,at,bootstrapping['league']);set_setting(c,'last_engine_success',at)
-   return {'ok':True,'bootstrapping':bootstrapping}
+   result={'ok':True,'bootstrapping':bootstrapping};event('engine_tick_finished',**result);return result
   with connect() as c:backfill_rosters(c)
   # Results are refreshed every cycle only when an open fixture has finished/overdue.
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
@@ -155,5 +158,5 @@ def tick(at=None,token=None):
       closed+=1;set_setting(c,'closing-refreshed:'+m['id'],{'at':at,'result':'captured'})
   settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)
-  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'missing_data_alerts':missed,'notified':notified,'closed':closed,'settled':settled}
+  result={'ok':True,'refreshed':len(due),'lineups':len(captured),'missing_data_alerts':missed,'notified':notified,'closed':closed,'settled':settled};event('engine_tick_finished',**result);return result
  finally:release('engine',token)
