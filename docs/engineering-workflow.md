@@ -35,8 +35,10 @@ or dependencies.
 4. Review `git status --short`, stage only the completed change, then make one
    focused commit on a `codex/**` task branch. Push it with `git push -u origin
    HEAD` and run `gh pr create --base main --fill` unless the branch already
-   has an open pull request. Staging validates the pull request before it can
-   merge to `main`; agents do not merge it themselves.
+   has an open pull request. Enable squash auto-merge with `gh pr merge --auto
+   --squash`; GitHub merges only after its required checks pass. Agents never
+   bypass those checks or push directly to `main` without the user's explicit
+   approval.
 
 ## Parallel work
 
