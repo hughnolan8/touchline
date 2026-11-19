@@ -35,8 +35,8 @@ or dependencies.
 4. Review `git status --short`, stage only the completed change, then make one
    focused commit on a `codex/**` task branch. Push it with `git push -u origin
    HEAD` and run `gh pr create --base main --fill` unless the branch already
-   has an open pull request. Staging validates the pull request before it can
-   merge to `main`; agents do not merge it themselves.
+   has an open pull request. GitHub Quality validates the pull request before
+   it can merge to `main`; agents do not merge it themselves.
 
 ## Parallel work
 
@@ -53,9 +53,8 @@ Use `scripts/install-git-hooks.sh` once per clone to enable the local safety
 net. The pre-commit hook requires a Markdown update in `README.md` or `docs/`
 when application code is staged. The pre-push hook runs pytest. GitHub Actions
 runs the same documentation rule and test suite for release branches, pull
-requests, and `main`. A passing release branch is deployed to shared staging;
-only the newest release branch retains that slot. See
-[CI/CD](features/ci-cd.md) for the deployment gate.
+requests, and `main`. Staging deployment is observational and does not gate a
+merge. See [CI/CD](features/ci-cd.md) for deployment details.
 
 The checks can demonstrate the test and documentation requirements, but no
 automated check can prove an agent applied Ponytail's reasoning. The durable

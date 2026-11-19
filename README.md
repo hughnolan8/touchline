@@ -58,7 +58,7 @@ then promote it explicitly (the baseline is the safe default):
 
 ## Railway continuous deployment
 
-The repository remote is GitHub. Production deploys only from `main`; Railway builds the `api` and `engine` services after each merge. Release branches deploy first to one isolated, shared staging environment, which has its own PostgreSQL database and a five-request daily Odds API limit. See [CI/CD](docs/features/ci-cd.md) for the Railway and GitHub setup, staging-data copy, release gates, and manual rollback procedure.
+The repository remote is GitHub. Production deploys only from `main`; Railway builds the `api` and `engine` services after each merge. Pull requests require Quality before merge; staging deployment is observational rather than a merge gate. See [CI/CD](docs/features/ci-cd.md) for the Railway and GitHub setup, checks, and manual rollback procedure.
 
 ## Understat cutover
 
