@@ -12,6 +12,7 @@ class Config:
     odds_api_key: str | None
     odds_max_requests_per_day: int | None
     odds_refresh_hours: float
+    odds_closing_refresh: bool
     pushover_token: str | None
     pushover_user: str | None
     pushover_device: str | None
@@ -33,6 +34,7 @@ def config() -> Config:
         odds_api_key=env("ODDS_API_KEY"),
         odds_max_requests_per_day=_int("ODDS_MAX_REQUESTS_PER_DAY"),
         odds_refresh_hours=float(env("ODDS_REFRESH_HOURS", "24")),
+        odds_closing_refresh=env("ODDS_CLOSING_REFRESH", "1") == "1",
         pushover_token=env("PUSHOVER_APP_TOKEN"),
         pushover_user=env("PUSHOVER_USER_KEY"),
         pushover_device=env("PUSHOVER_DEVICE"),

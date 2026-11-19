@@ -171,7 +171,8 @@ def run(at: str, src: Sources) -> dict:
             for b in rows(conn, "SELECT * FROM bets WHERE status='open' AND close_odds IS NULL")
         }
     closing = [(m, s) for m, s in closing if m["id"] in bets]
-    _refresh_odds(src, {m["league"] for m, _ in closing}, at, 2 / 60)
+    if config().odds_closing_refresh:
+        _refresh_odds(src, {m["league"] for m, _ in closing}, at, 2 / 60)
     with connect() as conn:
         summary["closed"] = sum(
             ledger.close(conn, bets[m["id"]], at, s.max_quote_age) for m, s in closing

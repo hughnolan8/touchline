@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+import pytest
+
 from tests.conftest import make_results
 from touchline import scheduler
 from touchline.db import connect, rows
@@ -114,6 +116,21 @@ def test_closing_line_and_settlement(monkeypatch):
     with connect() as conn:
         bet = rows(conn, "SELECT * FROM bets")[0]
     assert bet["status"] == "won" and bet["profit"] == 60.0 and bet["clv"] > 0
+
+
+def test_closing_refresh_can_be_switched_off(monkeypatch):
+    monkeypatch.setenv("ODDS_API_KEY", "test")
+    monkeypatch.setenv("ODDS_CLOSING_REFRESH", "0")
+    scheduler.tick(AT, Fakes())
+    closing = Fakes(odds=(3.5, 3.6, 2.2))
+    closing.now = "2026-01-10T14:57:00+00:00"
+    closing.fetch_odds = lambda *a, **k: pytest.fail("closing refresh should be skipped")
+    assert scheduler.tick(closing.now, closing)["closed"] == 0
+    after = "2026-01-10T17:30:00+00:00"
+    assert scheduler.tick(after, Fakes(final_score=(2, 0)))["settled"] == 1
+    with connect() as conn:
+        bet = rows(conn, "SELECT * FROM bets")[0]
+    assert bet["status"] == "won" and bet["clv"] is None
 
 
 def test_odds_api_supplies_fixtures_when_results_source_has_none(monkeypatch):
