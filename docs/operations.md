@@ -4,7 +4,8 @@
 
 Every push to `main` starts the **Production support** GitHub Actions workflow.
 It polls the public API for up to ten minutes and writes a pass/fail report to
-the job summary. A pass requires `/health`, `/health/engine`, and
+the job summary, allowing the engine's normal five-minute cycle to complete. A
+pass requires `/health`, `/health/engine`, and
 `/api/v1/summary` to succeed, with the summary reporting paper mode, a running
 engine, and an engine cycle completed after the check started.
 

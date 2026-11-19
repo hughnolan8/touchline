@@ -39,7 +39,7 @@ def test_candidate_evaluation_is_persisted_and_not_promotable_without_market_his
         report = evaluate_candidate(connection)
         row = connection.execute('SELECT model_version,eligible FROM model_evaluations').fetchone()
     assert report['eligible'] is False
-    assert row['model_version'] == 'xi-v2'
+    assert row['model_version'] == 'E0:xi-v2'
     assert row['eligible'] == 0
 
 

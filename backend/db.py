@@ -7,8 +7,9 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from . import postgres
+from .competitions import BY_CODE
 
-COMPETITIONS = {'E0': 'Premier League'}
+COMPETITIONS = {code: competition.name for code, competition in BY_CODE.items()}
 DEFAULT_STRATEGY = dict(enabled=True, stake=10.0, min_edge=0.05, max_exposure=0.10, max_quote_age=15, window_start=60, window_end=15, version=2, stake_mode='kelly', kelly_fraction=0.25, max_bet_fraction=0.02, min_stake=1.0, active_model='baseline-v1')
 
 def now(): return datetime.now(timezone.utc).isoformat()

@@ -102,18 +102,18 @@ def latest_lineup_snapshot(c, match_id, at):
         return None
     return {'captured_at': row['captured_at'], 'lineups': lineups}
 
-def lineup_features(c, match_id, side, lineup, cutoff):
+def lineup_features(c, match_id, side, lineup, cutoff, league='E0'):
     """Return XI xG/xA totals using only appearances before ``cutoff``."""
     match = c.execute('SELECT home,away FROM matches WHERE id=?', (match_id,)).fetchone()
     team_id = match['home'] if side == 'home' else match['away']
     if not isinstance(lineup, list) or len(lineup) != 11: return None
-    league = c.execute("SELECT COALESCE(SUM(xg)/NULLIF(SUM(minutes),0)*90,0),COALESCE(SUM(xa)/NULLIF(SUM(minutes),0)*90,0) FROM player_match_stats p JOIN matches m ON m.id=p.match_id WHERE m.kickoff<?", (cutoff,)).fetchone()
-    baseline = (_number(league[0]), _number(league[1]))
+    baseline_row = c.execute("SELECT COALESCE(SUM(xg)/NULLIF(SUM(minutes),0)*90,0),COALESCE(SUM(xa)/NULLIF(SUM(minutes),0)*90,0) FROM player_match_stats p JOIN matches m ON m.id=p.match_id WHERE m.competition=? AND m.kickoff<?", (league, cutoff)).fetchone()
+    baseline = (_number(baseline_row[0]), _number(baseline_row[1]))
     starters = []
     for player in lineup:
         player_id = player.get('internal_id') or resolve_player(c, player.get('source', ''), player.get('id'), player.get('name', ''), team_id, create=False)
         if not player_id: return None
-        records = rows(c, "SELECT p.*,m.kickoff FROM player_match_stats p JOIN matches m ON m.id=p.match_id WHERE p.player_id=? AND m.kickoff<?", (player_id, cutoff))
+        records = rows(c, "SELECT p.*,m.kickoff FROM player_match_stats p JOIN matches m ON m.id=p.match_id WHERE p.player_id=? AND m.competition=? AND m.kickoff<?", (player_id, league, cutoff))
         weighted_minutes = weighted_xg = weighted_xa = 0.0
         for record in records:
             age = max(0, (datetime.fromisoformat(cutoff) - datetime.fromisoformat(record['kickoff'])).total_seconds() / 86400)
@@ -123,12 +123,12 @@ def lineup_features(c, match_id, side, lineup, cutoff):
         xg90 = strength * (weighted_xg / weighted_minutes * 90 if weighted_minutes else 0) + (1-strength) * baseline[0]
         xa90 = strength * (weighted_xa / weighted_minutes * 90 if weighted_minutes else 0) + (1-strength) * baseline[1]
         starters.append({'id': player_id, 'name': player.get('name'), 'xg90': xg90, 'xa90': xa90, 'contribution': xg90 + xa90})
-    context = team_context(c, team_id, cutoff)
+    context = team_context(c, team_id, cutoff, league)
     return {'xg90': sum(x['xg90'] for x in starters), 'xa90': sum(x['xa90'] for x in starters), 'starters': sorted(starters, key=lambda x: x['contribution'], reverse=True)[:3], **context}
 
-def team_context(c, team_id, cutoff):
+def team_context(c, team_id, cutoff, league):
     """Pre-kickoff team context; never reads a match at or after ``cutoff``."""
-    games = rows(c, "SELECT home,away,kickoff,stats FROM matches WHERE competition='E0' AND status='finished' AND kickoff<? AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5", (cutoff, team_id, team_id))
+    games = rows(c, "SELECT home,away,kickoff,stats FROM matches WHERE competition=? AND status='finished' AND kickoff<? AND (home=? OR away=?) ORDER BY kickoff DESC LIMIT 5", (league, cutoff, team_id, team_id))
     cutoff_dt = datetime.fromisoformat(cutoff)
     if not games:
         return {'rest_days': 7.0, 'congestion': 0.0, 'attack_form': 0.0, 'defence_form': 0.0}
@@ -143,12 +143,12 @@ def team_context(c, team_id, cutoff):
     recent = sum((cutoff_dt - datetime.fromisoformat(g['kickoff'])).total_seconds() <= 14 * 86400 for g in games)
     return {'rest_days': rest, 'congestion': float(recent), 'attack_form': scored / len(games), 'defence_form': conceded / len(games)}
 
-def historical_lineups(c, match_id, cutoff):
+def historical_lineups(c, match_id, cutoff, league='E0'):
     match = c.execute('SELECT home,away FROM matches WHERE id=?', (match_id,)).fetchone()
     result = {}
     for side, team_id in (('home', match['home']), ('away', match['away'])):
         starters = [dict(row, internal_id=row['id']) for row in rows(c, 'SELECT p.id,p.name FROM player_match_stats s JOIN players p ON p.id=s.player_id WHERE s.match_id=? AND s.team_id=? AND s.starter=1', (match_id, team_id))]
         if len(starters) != 11: return None
-        result[side] = lineup_features(c, match_id, side, starters, cutoff)
+        result[side] = lineup_features(c, match_id, side, starters, cutoff, league)
         if not result[side]: return None
     return result

@@ -15,7 +15,7 @@ def test_parse_events_ingests_supported_verified_1x2_prices(monkeypatch):
         ]}]}],
     }
     assert odds_api.parse_events(object(), [event], observed) == 1
-    assert ingested[0][1:7] == ('the-odds-api', 'fixture-1', 'E0', 'Arsenal', 'Chelsea', '2026-09-25T12:00:00+00:00')
+    assert ingested[0][1:7] == ('the-odds-api', 'E0:fixture-1', 'E0', 'Arsenal', 'Chelsea', '2026-09-25T12:00:00+00:00')
     assert [(quote[3], quote[6], quote[7]) for quote in quotes] == [('home', 'Bet365', 2.2), ('draw', 'Bet365', 3.4), ('away', 'Bet365', 3.5)]
 
 

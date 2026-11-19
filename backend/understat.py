@@ -1,15 +1,15 @@
-"""Premier League fixture and result imports from Understat via understatapi."""
+"""Fixture and result imports from Understat via understatapi."""
 from datetime import datetime, timedelta, timezone
 
 from understatapi import UnderstatClient
 
 from .db import now, quarantine
+from .competitions import competition
 from .providers import ingest_match
 from .playerstats import save_roster
 
 
 SOURCE = 'understat'
-LEAGUE = 'EPL'
 REQUEST_TIMEOUT = 30
 
 
@@ -36,18 +36,19 @@ def _match_fields(match):
     )
 
 
-def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observed=None):
-    """Import Understat EPL fixtures for season start-years, returning their count.
+def sync_seasons(connection, league, seasons, client_factory=UnderstatClient, observed=None, include_rosters=True):
+    """Import one supported league's Understat fixtures for season start-years.
 
     The league endpoint supplies both upcoming fixtures and completed results.
     Only completed records carry final scores; no xG, forecasts, or odds are
     imported into Touchline.
     """
+    competition_info = competition(league)
     imported = 0
     observed = observed or now()
     fixture_cutoff = (datetime.fromisoformat(observed) + timedelta(days=7)).isoformat()
     with client_factory() as client:
-        endpoint = client.league(league=LEAGUE)
+        endpoint = client.league(league=competition_info.understat)
         for season in seasons:
             for match in endpoint.get_match_data(season=str(season), timeout=REQUEST_TIMEOUT):
                 try:
@@ -59,17 +60,21 @@ def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observ
                     if status == 'scheduled' and not observed < kickoff <= fixture_cutoff:
                         continue
                     match_id = ingest_match(
-                        connection, SOURCE, source_id, 'E0', home, away, kickoff, confirmed,
+                        connection, SOURCE, f'{competition_info.code}:{source_id}', competition_info.code, home, away, kickoff, confirmed,
                         status, stats, observed,
                     )
                 except (KeyError, TypeError, ValueError) as error:
                     quarantine(connection, SOURCE, str(error), match)
                     continue
+                finally:
+                    # Never keep database locks while fetching a roster. A full
+                    # five-league bootstrap can otherwise delay API startup.
+                    connection.commit()
                 if match_id:
                     # Rosters are only requested for finalised matches and only
                     # until a successful player-stat import exists.  They label
                     # historical XIs; never infer an upcoming lineup from them.
-                    if status == 'finished' and not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
+                    if include_rosters and status == 'finished' and not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
                         try:
                             save_roster(connection, match_id, client.match(match=str(source_id)).get_roster_data(timeout=REQUEST_TIMEOUT))
                         except Exception as error:  # Provider outages must not block scores.
@@ -78,16 +83,17 @@ def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observ
     return imported
 
 
-def import_epl_results(connection, seasons, client_factory=UnderstatClient):
-    """Import completed results and their per-match player observations.
+def import_results(connection, league, seasons, client_factory=UnderstatClient):
+    """Import one supported league's completed results and player observations.
 
     The roster is stored against its own completed fixture.  Feature builders
     later filter those observations by kickoff, so walk-forward fitting cannot
     see a player's target-match or future performance.
     """
+    competition_info = competition(league)
     imported = 0
     with client_factory() as client:
-        endpoint = client.league(league=LEAGUE)
+        endpoint = client.league(league=competition_info.understat)
         for season in seasons:
             for match in endpoint.get_match_data(season=str(season), timeout=REQUEST_TIMEOUT):
                 if not match.get('isResult'):
@@ -95,12 +101,15 @@ def import_epl_results(connection, seasons, client_factory=UnderstatClient):
                 try:
                     source_id, home, away, kickoff, confirmed, status, stats = _match_fields(match)
                     match_id = ingest_match(
-                        connection, SOURCE, source_id, 'E0', home, away, kickoff, confirmed,
+                        connection, SOURCE, f'{competition_info.code}:{source_id}', competition_info.code, home, away, kickoff, confirmed,
                         status, stats, now(),
                     )
                 except (KeyError, TypeError, ValueError) as error:
                     quarantine(connection, SOURCE, str(error), match)
                     continue
+                finally:
+                    # Roster retrieval is remote I/O; persist this fixture first.
+                    connection.commit()
                 if match_id:
                     if not connection.execute('SELECT 1 FROM player_match_stats WHERE match_id=? LIMIT 1', (match_id,)).fetchone():
                         try:
@@ -109,3 +118,33 @@ def import_epl_results(connection, seasons, client_factory=UnderstatClient):
                             quarantine(connection, SOURCE, f'Roster import failed: {error}', {'match_id': source_id})
                     imported += 1
     return imported
+
+
+def backfill_rosters(connection, limit=10, client_factory=UnderstatClient):
+    """Hydrate a small, committed batch of historical XIs after score import."""
+    pending = connection.execute("""SELECT m.id,m.source_id FROM matches m
+        WHERE m.source=? AND m.status='finished' AND NOT EXISTS
+        (SELECT 1 FROM player_match_stats p WHERE p.match_id=m.id)
+        ORDER BY m.kickoff DESC LIMIT ?""", (SOURCE, limit)).fetchall()
+    connection.commit()
+    imported = 0
+    with client_factory() as client:
+        for match in pending:
+            try:
+                source_id = str(match['source_id']).split(':', 1)[-1]
+                save_roster(connection, match['id'], client.match(match=source_id).get_roster_data(timeout=REQUEST_TIMEOUT))
+                imported += 1
+            except Exception as error:
+                quarantine(connection, SOURCE, f'Roster import failed: {error}', {'match_id': match['source_id']})
+            finally:
+                connection.commit()
+    return imported
+
+
+# Compatibility aliases for callers and saved automation that previously named EPL.
+def sync_epl_seasons(connection, seasons, client_factory=UnderstatClient, observed=None):
+    return sync_seasons(connection, 'E0', seasons, client_factory, observed)
+
+
+def import_epl_results(connection, seasons, client_factory=UnderstatClient):
+    return import_results(connection, 'E0', seasons, client_factory)

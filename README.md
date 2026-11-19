@@ -1,10 +1,10 @@
 # Touchline
 
-Touchline is a Premier League-only paper-betting dashboard. It uses Premier League fixtures and completed scores from Understat to fit a time-decayed Dixon–Coles model and compares its 1X2 probabilities with de-vigged UK odds from The Odds API.
+Touchline is a five-league paper-betting dashboard for the Premier League, La Liga, Bundesliga, Serie A, and Ligue 1. It fits one time-decayed Dixon–Coles model per league from Understat fixtures and completed scores, then compares its 1X2 probabilities with de-vigged UK odds from The Odds API.
 
 The virtual bankroll starts at £1,000. Predictions remain available for all future fixtures, but a paper bet is created only before kick-off on the fixture's UK calendar day, with a complete verified 1X2 market: fractional Kelly for positive value, or a £1 fallback on the least-negative outcome. No real-money bets are placed.
 
-Railway runs an API service and one five-minute engine worker. It captures the initial best UK 1X2 prices and polls FotMob for confirmed XIs in the 55–60 minute pre-kickoff window, retrying missing XIs through the 30-minute cutoff. A paper bet uses that fixed initial price after a complete confirmed XI and player-adjusted forecast succeed. The worker captures the best final market price in the last five minutes before kickoff and records closing-line value against the entry price; it keeps polling overdue open bets for final scores. The authenticated dashboard includes a full Premier League refresh control for testing.
+Railway runs an API service and one five-minute engine worker. It applies the same odds capture and confirmed-XI flow independently to every supported league. The dashboard's league picker filters fixtures, bets, and coverage; bankroll, exposure, and performance remain one shared £1,000 paper portfolio.
 
 ## Pushover bet notifications
 
@@ -31,6 +31,14 @@ results from Understat through `understatapi` before evaluating them:
 .pythonenv/bin/python scripts/backtest.py
 ```
 
+Pass `--league E0`, `SP1`, `D1`, `I1`, or `F1` to backtest one league; without
+it the command reports all five. Promote a validated confirmed-XI model only
+for its own league, for example:
+
+```sh
+.pythonenv/bin/python scripts/promote-model.py --model xi-v2 --league SP1
+```
+
 The JSON report includes fixture count, pick accuracy, multiclass log loss,
 Brier score, outcome totals, and confidence calibration. Populate the database
 with completed seasons first. By default it imports seasons starting in 2021;
@@ -54,7 +62,7 @@ The repository remote is GitHub. Production deploys only from `main`; Railway bu
 
 ## Understat cutover
 
-The engine bootstraps the active Premier League season and the prior three seasons from Understat. It refreshes the active season on manual refresh and while settling overdue bets; The Odds API remains the only source of 1X2 prices.
+The engine bootstraps the active season and the prior three seasons for every supported league from Understat. It refreshes active seasons on manual refresh and while settling overdue bets; The Odds API remains the only source of 1X2 prices. Its daily request cap is shared across all leagues and should be sized accordingly.
 
 For the one-time datasource cutover, first deploy the updated engine so the reset command is present in its image. Then reset the Railway football, model, prediction, and paper-ledger data from inside that engine service:
 

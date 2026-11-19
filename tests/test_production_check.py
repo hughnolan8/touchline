@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -60,3 +61,16 @@ def test_monitor_times_out_when_the_engine_success_does_not_advance():
 def test_check_reports_unavailable_endpoints_without_response_details():
     _, problems, _ = production_check.check('https://touchline.test', START, responder(errors={'/health': 'unavailable'}))
     assert 'API health check is unhealthy' in problems
+
+
+def test_main_uses_the_deployment_refresh_start_time(monkeypatch):
+    observed = []
+
+    def monitor(*args, **kwargs):
+        observed.append(kwargs['clock']())
+        return True, {'api': {'status': 200}, 'engine': {'status': 200}, 'summary': {'status': 200}}, [], START
+
+    monkeypatch.setattr(production_check, 'monitor', monitor)
+    monkeypatch.setattr(sys, 'argv', ['check-production.py', '--base-url', 'https://touchline.test', '--started-at', START.isoformat()])
+    assert production_check.main() == 0
+    assert observed == [START]
