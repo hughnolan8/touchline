@@ -61,3 +61,14 @@ th { color: var(--muted); font-weight: 500; font-size: 13px; }
 code { font-size: 13px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (max-width: 640px) { .league { margin-left: 0; width: 100%; } .league select { width: 100%; } }
+input[type="number"] {
+  font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; width: 8em;
+}
+.chip { color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 13px; }
+.chip:hover { border-color: var(--accent); }
+.picks { display: flex; gap: 4px; border: 0; margin: 0; padding: 0; }
+.picks input { position: absolute; opacity: 0; }
+.picks span { display: inline-block; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font-size: 13px; }
+.picks input:checked + span { border-color: var(--accent); background: var(--bg); font-weight: 600; }
+.picks input:focus-visible + span { outline: 2px solid var(--accent); }

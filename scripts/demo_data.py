@@ -39,11 +39,12 @@ def main() -> None:
             kickoff = (datetime.now(UTC) + timedelta(hours=20 + 24 * i)).isoformat(
                 timespec="seconds"
             )
-            ingest.store_fixture(conn, Fixture(f"u{i}", "E0", home, away, kickoff, False), at)
+            fixture = Fixture(f"u{i}", "E0", home, away, kickoff, False)
+            match_id = ingest.store_fixture(conn, fixture, at)
             conn.executemany(
                 "INSERT OR IGNORE INTO odds_quotes VALUES(?,?,?,?,?,?)",
                 [
-                    (f"E0:u{i}", "Bet365", s, round(o + rng.uniform(-0.3, 0.3), 2), at, at)
+                    (match_id, "Bet365", s, round(o + rng.uniform(-0.3, 0.3), 2), at, at)
                     for s, o in (("home", 2.2), ("draw", 3.4), ("away", 3.3))
                 ],
             )

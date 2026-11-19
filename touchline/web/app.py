@@ -14,7 +14,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from touchline import scheduler
+from touchline import accumulator, scheduler
 from touchline.config import config, setup_logging
 from touchline.db import connect, now
 from touchline.jobs import modelling, odds
@@ -91,6 +91,23 @@ def predictions(request: Request):
     with connect() as conn:
         fixtures = queries.predictions(conn, _league(request), now())
     return page(request, "predictions", fixtures=fixtures)
+
+
+@app.get("/accumulator")
+def accumulator_page(request: Request):
+    """Builder state lives in the query string: `leg.<match_id>=<selection>`, `stake`, `auto`."""
+    params = request.query_params
+    try:
+        stake = min(max(float(params.get("stake") or 10), 0.0), 100_000.0)
+    except ValueError:
+        stake = 10.0
+    chosen = {k[4:]: v for k, v in params.items() if k.startswith("leg.") and v}
+    with connect() as conn:
+        if params.get("auto", "").isdigit():
+            fixtures = queries.predictions(conn, _league(request), now())
+            chosen = accumulator.suggest(fixtures, int(params["auto"]))
+        data = queries.accumulator_builder(conn, _league(request), now(), chosen, stake)
+    return page(request, "accumulator", **data)
 
 
 @app.get("/bets")

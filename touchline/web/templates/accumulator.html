@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+{% set q = '&league=' ~ league if league else '' %}
+<section class="tiles" aria-label="Accumulator summary">
+  <div class="tile"><span>Legs</span><strong>{{ acca.legs }}</strong></div>
+  <div class="tile"><span>Combined odds</span><strong>{{ '%.2f' % acca.odds if acca.odds else '–' }}</strong></div>
+  <div class="tile"><span>Model chance</span><strong>{{ acca.probability | pct(2) }}</strong></div>
+  <div class="tile"><span>Fair odds</span><strong>{{ '%.2f' % acca.fair_odds if acca.fair_odds else '–' }}</strong></div>
+  <div class="tile"><span>Edge</span><strong class="{{ 'pos' if acca.edge and acca.edge > 0 else 'neg' if acca.edge else '' }}">{{ acca.edge | pct }}</strong></div>
+  <div class="tile"><span>Returns on {{ acca.stake | money if acca.stake is not none else '–' }}</span><strong>{{ acca.returns | money }}</strong></div>
+  <div class="tile"><span>Expected profit</span><strong class="{{ 'pos' if acca.expected_profit and acca.expected_profit > 0 else 'neg' if acca.expected_profit else '' }}">{{ acca.expected_profit | money }}</strong></div>
+  <div class="tile"><span>Full Kelly</span><strong>{{ acca.kelly | pct }}</strong></div>
+</section>
+
+<section class="card">
+  <h2>Build an accumulator{% if league %} · {{ league_names[league] }}{% endif %}</h2>
+  <p class="actions">
+    {% for n in [2, 3, 4] %}<a class="chip" href="/accumulator?auto={{ n }}{{ q }}">Best {{ n }} value legs</a>{% endfor %}
+    <a class="chip" href="/accumulator{{ '?league=' ~ league if league else '' }}">Clear</a>
+  </p>
+  {% if fixtures %}
+  <form method="get" action="/accumulator">
+    {% if league %}<input type="hidden" name="league" value="{{ league }}">{% endif %}
+    <div class="scroll"><table>
+      <thead><tr><th>Kick-off</th><th>Fixture</th><th>Leg</th></tr></thead>
+      <tbody>
+      {% for f in fixtures %}
+        <tr>
+          <td>{{ f.kickoff | when }}{% if not league %}<small class="muted"> {{ f.league }}</small>{% endif %}</td>
+          <td>{{ f.home_name }} v {{ f.away_name }}</td>
+          <td><fieldset class="picks"><legend class="sr-only">{{ f.home_name }} v {{ f.away_name }}</legend>
+            <label><input type="radio" name="leg.{{ f.id }}" value="" {% if f.id not in chosen %}checked{% endif %}><span>–</span></label>
+            {% for s in ['home', 'draw', 'away'] if f.prices[s] %}
+            <label title="Model {{ f.probs[s] | pct(0) }}, edge {{ f.edges[s] | pct }}">
+              <input type="radio" name="leg.{{ f.id }}" value="{{ s }}" {% if chosen.get(f.id) == s %}checked{% endif %}>
+              <span class="{{ 'pos' if f.edges[s] > 0 else '' }}">{{ s[0] | upper }} {{ '%.2f' % f.prices[s].odds }}</span>
+            </label>
+            {% endfor %}
+          </fieldset></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <p class="actions">
+      <label>Stake £ <input type="number" name="stake" min="0" step="0.01" value="{{ '%.2f' % acca.stake if acca.stake is not none else '10.00' }}" inputmode="decimal"></label>
+      <button>Price accumulator</button>
+    </p>
+  </form>
+  <p class="muted">Best UK price per leg. Model chance multiplies each leg's forecast, assuming the
+    legs are independent; one leg per fixture. Green prices have a positive single-leg edge.
+    This is a calculator only: accumulators are not placed in the paper ledger.</p>
+  {% else %}
+  <p class="muted">No forecast fixtures with odds in the next seven days.</p>
+  {% endif %}
+</section>
+{% endblock %}
