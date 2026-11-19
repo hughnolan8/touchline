@@ -36,6 +36,15 @@ def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):
     assert calls == [('E0', [2023])]
 
 
+def test_bootstrap_logs_the_invalid_setting_key(monkeypatch, capsys):
+    monkeypatch.setattr(engine, 'setting', lambda *_: (_ for _ in ()).throw(json.JSONDecodeError('bad', '', 0)))
+    with pytest.raises(json.JSONDecodeError):
+        engine.bootstrap('2026-09-17T12:00:00+00:00')
+    output = capsys.readouterr().out
+    assert '"event":"bootstrap_state_invalid"' in output
+    assert '"setting_key":"bootstrap_seasons:E0"' in output
+
+
 def test_current_season_refresh_uses_understat(monkeypatch):
     calls = []
 

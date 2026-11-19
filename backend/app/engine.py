@@ -1,5 +1,5 @@
 """One five-minute worker for every supported league; no queue or trainer service."""
-import logging
+import json,logging
 from backend.db import connect,now,setting,set_setting
 from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
@@ -21,7 +21,10 @@ def bootstrap(at=None):
  year=season_start(at);seasons=range(year-3,year+1)
  with connect() as c:
   for league in COMPETITIONS:
-   done=setting(c,f'bootstrap_seasons:{league.code}',[])
+   key=f'bootstrap_seasons:{league.code}'
+   try:done=setting(c,key,[])
+   except json.JSONDecodeError:
+    event('bootstrap_state_invalid',logging.ERROR,league=league.code,setting_key=key);raise
    next_season=next((season for season in seasons if season not in done),None)
    if next_season is None:continue
    sync_seasons(c,league.code,[next_season],include_rosters=False)

@@ -28,6 +28,8 @@ its platform-managed database logs.
 Engine failure events also include the safe workflow phase and exception type,
 so operator logs identify the failing subsystem without exposing exception
 messages or stored data.
+Invalid bootstrap progress is identified by league and setting key, never by
+the stored value.
 
 For an on-demand investigation, ask a Codex agent for production support. It
 will inspect public health first and may use local Railway status/log access
