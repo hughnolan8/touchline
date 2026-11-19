@@ -1,10 +1,9 @@
 # CI/CD
 
-Touchline promotes a release branch through one shared Railway staging
-environment before merging it to production. Release branches are named
-`feature/**`, `fix/**`, or `codex/**`; the latest successful branch replaces an
-older staging deployment. A staging pass creates a pull request to `main`,
-where Codex review and GitHub branch protection control auto-merge.
+Touchline deploys release branches to one shared Railway staging environment
+for observation before merging to production. Release branches are named
+`feature/**`, `fix/**`, or `codex/**`; the latest deployment replaces an older
+one. Staging status is not a merge requirement.
 
 ## One-time Railway setup
 
@@ -61,15 +60,15 @@ It authorizes the post-deploy engine cycle; do not configure it in production.
 Never commit tokens or database URLs.
 
 Enable Codex's connected GitHub pull-request review. Protect `main`: require
-the GitHub Actions `test` and `validate / validate` check contexts, one Codex
-approval, no unresolved conversations, and no force pushes. Enable squash
-auto-merge. Open one test release PR to verify the exact Codex review identity
-before making its approval mandatory.
+the GitHub Actions `test` check context, one Codex approval, no unresolved
+conversations, and no force pushes. Enable squash auto-merge. Open one test
+release PR to verify the exact Codex review identity before making its approval
+mandatory.
 
 ### Changing required workflows
 
-`MainProtect` requires the exact check contexts `test` and `validate /
-validate`. When changing the workflow that supplies either context:
+`MainProtect` requires the exact check context `test`. When changing the
+workflow that supplies it:
 
 1. Keep the existing required context passing and add the replacement check as
    non-required in the same PR.
@@ -78,10 +77,10 @@ validate`. When changing the workflow that supplies either context:
 3. Remove the old context from `MainProtect` only after the replacement is
    required and passing; delete or rename its workflow in a final PR.
 
-For an emergency repair where a required check cannot pass, an administrator
-may temporarily remove only that context from `MainProtect`, merge the narrow
-repair, and immediately restore it. There are no bypass actors configured, so
-this ruleset edit is the only emergency path.
+For an emergency repair where the required check cannot pass, an administrator
+may temporarily remove it from `MainProtect`, merge the narrow repair, and
+immediately restore it. There are no bypass actors configured, so this ruleset
+edit is the only emergency path.
 
 ## Release and rollback
 
@@ -99,10 +98,10 @@ this ruleset edit is the only emergency path.
    responses and the requested cycle to finish. It fails on structured
    application failures and traceback signatures in Railway logs.
    It writes the resulting `validate` status to the tested commit, and failed
-   diagnostics are retained as a workflow artifact.
-4. A passing release creates or updates its PR, requests Codex review, and
-   enables GitHub auto-merge. Branch protection prevents merging until the
-   required checks and approval pass.
+   diagnostics are retained as a workflow artifact. A failed staging deployment
+   does not block the pull request.
+4. Branch protection prevents merging until Quality and the required review
+   conditions pass.
 5. Merging to `main` deploys production and runs the production support check.
 
 There is no automatic rollback. To revert application code, run **Roll back
