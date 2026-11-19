@@ -2,6 +2,8 @@
 
 - [Paper betting engine](paper-betting.md) — forecasts, odds checks, staking,
   line-up gating, and settlement.
+- [Workflow and decision logic](workflow.md) — service boundaries, engine
+  timing, decision gates, and paper-ledger lifecycle.
 - [Railway operations](../operations.md) — production services and the
   Understat cutover.
 - [Production support](production-support.md) — push-triggered public health
