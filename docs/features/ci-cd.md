@@ -103,7 +103,8 @@ this ruleset edit is the only emergency path.
 4. A passing release creates or updates its PR, requests Codex review, and
    enables GitHub auto-merge. Branch protection prevents merging until the
    required checks and approval pass.
-5. Merging to `main` deploys production and runs the production support check.
+5. Merging to `main` runs the production workflow, which deploys the merged
+   commit to Railway before running the production support check.
 
 There is no automatic rollback. To revert application code, run **Roll back
 production** from GitHub Actions with the last known-good commit SHA or tag.

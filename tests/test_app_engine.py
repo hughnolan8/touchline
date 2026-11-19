@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from backend.app import engine
 from backend.app import api
 from backend.app.store import initialize
@@ -32,6 +36,15 @@ def test_bootstrap_syncs_active_and_prior_three_understat_seasons(monkeypatch):
     assert calls == [('E0', [2023])]
 
 
+def test_bootstrap_logs_the_invalid_setting_key(monkeypatch, capsys):
+    monkeypatch.setattr(engine, 'setting', lambda *_: (_ for _ in ()).throw(json.JSONDecodeError('bad', '', 0)))
+    with pytest.raises(json.JSONDecodeError):
+        engine.bootstrap('2026-09-17T12:00:00+00:00')
+    output = capsys.readouterr().out
+    assert '"event":"bootstrap_state_invalid"' in output
+    assert '"setting_key":"bootstrap_seasons:E0"' in output
+
+
 def test_current_season_refresh_uses_understat(monkeypatch):
     calls = []
 
@@ -42,6 +55,14 @@ def test_current_season_refresh_uses_understat(monkeypatch):
     monkeypatch.setattr(engine, 'sync_seasons', sync)
     assert engine.import_scores('2026-02-01T12:00:00+00:00') == 210
     assert calls == [(league, [2025]) for league in ('E0', 'SP1', 'D1', 'I1', 'F1')]
+
+
+def test_understat_json_failures_do_not_stop_the_engine(monkeypatch, capsys):
+    monkeypatch.setattr(engine, 'sync_seasons', lambda *_args, **_kwargs: (_ for _ in ()).throw(json.JSONDecodeError('bad', '', 0)))
+    assert engine.import_scores('2026-02-01T12:00:00+00:00') == 0
+    assert engine.bootstrap('2026-09-17T12:00:00+00:00') is False
+    output = capsys.readouterr().out
+    assert output.count('"event":"understat_sync_failed"') == 6
 
 
 def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monkeypatch):
@@ -139,3 +160,12 @@ def test_engine_refresh_endpoint_waits_for_the_running_cycle(monkeypatch):
     with TestClient(api.create_app(setup=False)) as client:
         response = client.post('/api/v1/refresh-engine', headers={'X-Deployment-Refresh-Token': 'test-token'})
     assert response.status_code == 409
+
+
+def test_tick_logs_the_safe_phase_for_failures(monkeypatch, capsys):
+    monkeypatch.setattr(engine, 'bootstrap', lambda _: (_ for _ in ()).throw(json.JSONDecodeError('bad', '', 0)))
+    with pytest.raises(json.JSONDecodeError):
+        engine.tick('2026-09-17T12:00:00+00:00')
+    output = capsys.readouterr().out
+    assert '"event":"engine_tick_failed"' in output
+    assert '"phase":"bootstrap"' in output

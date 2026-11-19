@@ -1,9 +1,11 @@
 """Fixture identity and odds normalisation."""
 import hashlib
 import json
+import logging
 import re
 import unicodedata
 from .db import COMPETITIONS, dump, now, rows, quarantine
+from .log import event
 
 # Deliberate aliases only: never fuzzy-join an unfamiliar team onto a priced fixture.
 ALIASES={'Manchester United':'Man United','Manchester City':'Man City','Newcastle United':'Newcastle','Nottingham Forest':'Nott\'m Forest','Tottenham Hotspur':'Tottenham','Brighton & Hove Albion':'Brighton','Wolverhampton Wanderers':'Wolves','West Ham United':'West Ham','Leicester City':'Leicester','Leeds United':'Leeds','Ipswich Town':'Ipswich','Coventry City':'Coventry','Hull City':'Hull','Sheffield United':'Sheffield United','West Bromwich Albion':'West Brom','Paris Saint-Germain':'Paris SG','Olympique Lyonnais':'Lyon','Olympique de Marseille':'Marseille','AS Monaco':'Monaco','Stade Rennais':'Rennes','Stade Brestois 29':'Brest','Stade de Reims':'Reims','RC Strasbourg Alsace':'Strasbourg','RC Lens':'Lens','LOSC Lille':'Lille','OGC Nice':'Nice','AJ Auxerre':'Auxerre','Le Havre':'Le Havre','Hellas Verona':'Verona','Internazionale Milano':'Inter','AC Milan':'Milan','AS Roma':'Roma','SSC Napoli':'Napoli','SS Lazio':'Lazio','ACF Fiorentina':'Fiorentina','US Lecce':'Lecce','Atalanta BC':'Atalanta','Parma Calcio 1913':'Parma','Como 1907':'Como','Udinese Calcio':'Udinese','Real Betis Balompié':'Betis','Atlético de Madrid':'Ath Madrid','Atletico Madrid':'Ath Madrid','Athletic Club':'Ath Bilbao','Athletic Club Bilbao':'Ath Bilbao','Deportivo Alavés':'Alaves','RCD Espanyol':'Espanol','RCD Mallorca':'Mallorca','CA Osasuna':'Osasuna','RC Celta de Vigo':'Celta','Celta Vigo':'Celta','Real Sociedad de Fútbol':'Sociedad','Real Sociedad':'Sociedad','Rayo Vallecano de Madrid':'Vallecano','Rayo Vallecano':'Vallecano','Bayern München':'Bayern Munich','Bayern Munich':'Bayern Munich','Borussia Dortmund':'Dortmund','Bayer 04 Leverkusen':'Leverkusen','Bayer Leverkusen':'Leverkusen','Borussia Mönchengladbach':'M\'gladbach','Eintracht Frankfurt':'Ein Frankfurt','VfB Stuttgart':'Stuttgart','VfL Wolfsburg':'Wolfsburg','SC Freiburg':'Freiburg','TSG 1899 Hoffenheim':'Hoffenheim','1899 Hoffenheim':'Hoffenheim','RB Leipzig':'RB Leipzig','1. FSV Mainz 05':'Mainz','FSV Mainz 05':'Mainz','1. FC Union Berlin':'Union Berlin','Union Berlin':'Union Berlin','1. FC Köln':'FC Koln','Hamburger SV':'Hamburg','SV Werder Bremen':'Werder Bremen','Werder Bremen':'Werder Bremen','FC St. Pauli':'St Pauli','FC Augsburg':'Augsburg','1. FC Heidenheim 1846':'Heidenheim'}
@@ -38,7 +40,12 @@ def ingest_match(c,source,source_id,competition,home,away,kickoff,confirmed,stat
     if len(candidates)>1:
         quarantine(c,source,'Ambiguous fixture identity',dict(home=home,away=away,kickoff=kickoff));return None
     if candidates:
-        old=candidates[0];ident=old['id'];oldstats=json.loads(old['stats'])
+        old=candidates[0];ident=old['id']
+        try:oldstats=json.loads(old['stats'])
+        except json.JSONDecodeError:
+            oldstats={};quarantine(c,source,'Invalid stored match stats',{'match_id':ident})
+            c.execute('UPDATE matches SET stats=? WHERE id=?',(dump(oldstats),ident))
+            event('stored_match_stats_invalid',logging.ERROR,match_id=ident)
         if (old['home'],old['away'],old['competition'])!=(h,a,competition):
             quarantine(c,source,'Source identity changed teams or competition',dict(source_id=source_id,home=home,away=away));return None
         c.execute('INSERT OR IGNORE INTO match_aliases VALUES(?,?,?)',(source,source_id,ident))

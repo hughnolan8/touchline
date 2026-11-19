@@ -12,7 +12,21 @@ permissions:
   contents: read
 
 jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      matrix:
+        service: [api, engine]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Deploy ${{ matrix.service }} to production
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: npx --yes @railway/cli@latest up --ci --project "$RAILWAY_PROJECT_ID" --environment production --service "${{ matrix.service }}"
   validate:
+    needs: deploy
     runs-on: ubuntu-latest
     environment: production
     env:

@@ -1,5 +1,5 @@
 """One five-minute worker for every supported league; no queue or trainer service."""
-import logging
+import json,logging
 from backend.db import connect,now,setting,set_setting
 from backend.engine import BASELINE_VERSION,XI_VERSION,best_market,matches,train,train_player,forecast,place_required_bet,settle,seconds,capture_initial_snapshot,initial_snapshot,capture_closing_line
 from backend.playerstats import latest_lineup_snapshot
@@ -9,21 +9,31 @@ from .provider import MobileOdds,odds_api_configured
 from .fotmob import FotMobLineups
 from .notifications import deliver_pending_bet_notifications,deliver_pending_fixture_notifications,queue_fixture_notification
 from .store import acquire,release
+from backend.log import event
 def import_scores(at=None):
  at=at or now()
  with connect() as c:
-  count=sum(sync_seasons(c,league.code,[season_start(at)],include_rosters=False) for league in COMPETITIONS)
- logging.info('understat_refresh records=%s',count)
+  count=0
+  for league in COMPETITIONS:
+   try:count+=sync_seasons(c,league.code,[season_start(at)],include_rosters=False)
+   except json.JSONDecodeError:
+    event('understat_sync_failed',logging.WARNING,league=league.code,error_type='JSONDecodeError')
+ event('understat_refresh_finished',records=count)
  return count
 def bootstrap(at=None):
  at=at or now()
  year=season_start(at);seasons=range(year-3,year+1)
  with connect() as c:
   for league in COMPETITIONS:
-   done=setting(c,f'bootstrap_seasons:{league.code}',[])
+   key=f'bootstrap_seasons:{league.code}'
+   try:done=setting(c,key,[])
+   except json.JSONDecodeError:
+    event('bootstrap_state_invalid',logging.ERROR,league=league.code,setting_key=key);raise
    next_season=next((season for season in seasons if season not in done),None)
    if next_season is None:continue
-   sync_seasons(c,league.code,[next_season],include_rosters=False)
+   try:sync_seasons(c,league.code,[next_season],include_rosters=False)
+   except json.JSONDecodeError:
+    event('understat_sync_failed',logging.WARNING,league=league.code,season=next_season,error_type='JSONDecodeError');return False
    set_setting(c,f'bootstrap_seasons:{league.code}',[*done,next_season])
    if next_season==year:set_setting(c,f'bootstrap_complete:{league.code}',at)
    return {'league':league.code,'season':next_season}
@@ -49,20 +59,21 @@ def refresh_all(at=None):
    placed.append(place_required_bet(c,m,p,at) if p else 'blocked: active model unavailable')
   set_setting(c,'last_manual_refresh',at)
  result={'fixtures':count,'decisions':placed,'notified':deliver_pending_bet_notifications(),'settled':settle(at)}
- logging.info('manual_refresh fixtures=%s decisions=%s settled=%s',count,len(placed),result['settled'])
+ event('manual_refresh_finished',fixtures=count,decisions=len(placed),settled=result['settled'])
  return result
 def refresh_missing_odds(at=None):
  at=at or now()
  with connect() as c:
   missing=[m for m in matches(c,at=at) if not best_market(c,m['id'])]
- if not missing:return {'requested':0,'fixtures':0,'still_missing':0}
+ if not missing:
+  event('missing_odds_refresh_finished',requested=0,fixtures=0,still_missing=0);return {'requested':0,'fixtures':0,'still_missing':0}
  odds=MobileOdds()
  try:count=odds.refresh(missing,at)
  finally:odds.close()
  with connect() as c:
   remaining=sum(not bool(best_market(c,m['id'])) for m in missing)
   set_setting(c,'last_missing_odds_refresh',at)
- return {'requested':len(missing),'fixtures':count,'still_missing':remaining}
+ result={'requested':len(missing),'fixtures':count,'still_missing':remaining};event('missing_odds_refresh_finished',**result);return result
 def _capture_lineups(fixtures,at):
  if not fixtures:return []
  lineups=FotMobLineups()
@@ -93,23 +104,30 @@ def _place_confirmed(fixtures,captured,at):
  return results
 def tick(at=None,token=None):
  at=at or now();token=token or acquire('engine',seconds=290)
- if not token:return {'ok':True,'skipped':True}
+ if not token:
+  event('engine_cycle_skipped',reason='lease_held');return {'ok':True,'skipped':True}
+ event('engine_tick_started',at=at)
+ phase='configuration'
  try:
   with connect() as c:set_setting(c,'odds_api_engine_configured',odds_api_configured())
+  phase='bootstrap'
   bootstrapping=bootstrap(at)
   if bootstrapping:
    with connect() as c:
     train(c,at,bootstrapping['league']);set_setting(c,'last_engine_success',at)
-   return {'ok':True,'bootstrapping':bootstrapping}
+   result={'ok':True,'bootstrapping':bootstrapping};event('engine_tick_finished',**result);return result
+  phase='roster_backfill'
   with connect() as c:backfill_rosters(c)
   # Results are refreshed every cycle only when an open fixture has finished/overdue.
   with connect() as c:open_bets=c.execute("SELECT 1 FROM bets b JOIN matches m ON m.id=b.match_id WHERE b.status IN ('open','review') AND m.kickoff<=?",(at,)).fetchone()
-  if open_bets:import_scores(at)
+  if open_bets:
+   phase='score_import';import_scores(at)
   # The initial entry market is captured once in the 55-60 minute window.
   # It remains the paper-bet price even if the confirmed XI arrives later.
   with connect() as c:
    due=[m for m in matches(c,at=at) if 55<=seconds(m['kickoff'],at)/60<=60 and setting(c,'initial-odds-refreshed:'+m['id']) is None]
   if due:
+   phase='initial_odds'
    odds=MobileOdds()
    try:odds.refresh(due,at)
    finally:odds.close()
@@ -121,7 +139,7 @@ def tick(at=None,token=None):
   # cutoff. Prices are deliberately not refreshed during those retries.
   with connect() as c:
    lineup_due=[m for m in matches(c,at=at) if setting(c,'initial-odds-refreshed:'+m['id']) is not None and setting(c,'lineup-refreshed:'+m['id']) is None and 30<=seconds(m['kickoff'],at)/60<=60]
-  captured=_capture_lineups(lineup_due,at)
+  phase='lineups';captured=_capture_lineups(lineup_due,at)
   _place_confirmed(lineup_due,captured,at)
   # At the first cycle after the 30-minute cutoff, explain why a fixture could
   # not be considered. A normal no-bet strategy decision is deliberately silent.
@@ -135,7 +153,7 @@ def tick(at=None,token=None):
     if not latest_lineup_snapshot(c,m['id'],at):missing.append('confirmed starting XIs')
     if missing:
      queue_fixture_notification(c,m['id'],missing);missed+=1
-  notified=deliver_pending_bet_notifications()+deliver_pending_fixture_notifications()
+  phase='notifications';notified=deliver_pending_bet_notifications()+deliver_pending_fixture_notifications()
   # A final refresh in the last five minutes establishes the market close.
   with connect() as c:
    closing_due=[]
@@ -145,6 +163,7 @@ def tick(at=None,token=None):
     if bet and not c.execute('SELECT 1 FROM bet_closing_lines WHERE bet_id=?',(bet['id'],)).fetchone():closing_due.append(m)
   closed=0
   if closing_due:
+   phase='closing_odds'
    odds=MobileOdds()
    try:odds.refresh(closing_due,at)
    finally:odds.close()
@@ -153,7 +172,9 @@ def tick(at=None,token=None):
      bet=dict(c.execute("SELECT * FROM bets WHERE portfolio='automatic' AND match_id=?",(m['id'],)).fetchone())
      if capture_closing_line(c,bet,at):
       closed+=1;set_setting(c,'closing-refreshed:'+m['id'],{'at':at,'result':'captured'})
-  settled=settle(at)
+  phase='settlement';settled=settle(at)
   with connect() as c:set_setting(c,'last_engine_success',at)
-  return {'ok':True,'refreshed':len(due),'lineups':len(captured),'missing_data_alerts':missed,'notified':notified,'closed':closed,'settled':settled}
+  result={'ok':True,'refreshed':len(due),'lineups':len(captured),'missing_data_alerts':missed,'notified':notified,'closed':closed,'settled':settled};event('engine_tick_finished',**result);return result
+ except Exception as error:
+  event('engine_tick_failed',logging.ERROR,phase=phase,error_type=type(error).__name__);raise
  finally:release('engine',token)

@@ -1,7 +1,9 @@
 """Public multi-league paper simulation API."""
 import json
 import hmac
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from threading import Lock
 from pathlib import Path
@@ -17,6 +19,7 @@ from .store import configure,initialize,acquire,release
 from .engine import refresh_all,refresh_missing_odds,tick
 from .engine import refresh_all,refresh_missing_odds
 from .provider import odds_api_configured
+from backend.log import configure as configure_logging,event
 def serialize(b):
  s=json.loads(b['snapshot']);closing=None
  if b.get('closing_odds') is not None:
@@ -62,18 +65,29 @@ def create_app(setup=True):
  def ready():
   with lock:
    if getattr(app.state,'ready',False):return True
-   try:initialize();app.state.ready=True;return True
-   except psycopg.OperationalError:return False
+   try:
+    initialize();app.state.ready=True;event('api_database_ready');return True
+   except psycopg.OperationalError as error:
+    event('api_database_unavailable',logging.ERROR,error_type=type(error).__name__);return False
  @asynccontextmanager
  async def lifespan(_):
+  configure_logging();event('api_started',setup=setup)
   if setup:configure()
   await run_in_threadpool(ready);yield
+  event('api_stopped')
  app.router.lifespan_context=lifespan;root=Path(__file__).resolve().parents[2]/'web';app.mount('/static',StaticFiles(directory=root/'static'),name='static')
  @app.middleware('http')
  async def db(request,call_next):
+  started=time.monotonic()
   if request.url.path=='/' or request.url.path.startswith('/static/'):return await call_next(request)
-  if not await run_in_threadpool(ready):return JSONResponse({'detail':'Database unavailable'},503)
-  return await call_next(request)
+  if not await run_in_threadpool(ready):
+   event('api_request_finished',logging.WARNING,method=request.method,path=request.url.path,status_code=503,duration_ms=round((time.monotonic()-started)*1000))
+   return JSONResponse({'detail':'Database unavailable'},503)
+  try:response=await call_next(request)
+  except Exception as error:
+   event('api_request_failed',logging.ERROR,method=request.method,path=request.url.path,error_type=type(error).__name__,duration_ms=round((time.monotonic()-started)*1000));raise
+  event('api_request_finished',logging.WARNING if response.status_code>=400 else logging.INFO,method=request.method,path=request.url.path,status_code=response.status_code,duration_ms=round((time.monotonic()-started)*1000))
+  return response
  @app.get('/',include_in_schema=False)
  def dashboard():return FileResponse(root/'index.html')
  @app.get('/health')
@@ -115,21 +129,28 @@ def create_app(setup=True):
  @app.post('/api/v1/refresh-all')
  def refresh_all_endpoint():
   token=acquire('manual-refresh',seconds=300)
-  if not token:raise HTTPException(409,'A refresh is already running')
-  try:return refresh_all()
+  if not token:
+   event('manual_refresh_rejected',logging.WARNING,reason='lease_held');raise HTTPException(409,'A refresh is already running')
+  try:
+   event('manual_refresh_started');result=refresh_all();event('manual_refresh_finished',fixtures=result.get('fixtures'),settled=result.get('settled'));return result
   finally:release('manual-refresh',token)
  @app.post('/api/v1/refresh-missing-odds')
  def refresh_missing_odds_endpoint():
   token=acquire('missing-odds-refresh',seconds=300)
-  if not token:raise HTTPException(409,'An odds refresh is already running')
-  try:return refresh_missing_odds()
+  if not token:
+   event('missing_odds_refresh_rejected',logging.WARNING,reason='lease_held');raise HTTPException(409,'An odds refresh is already running')
+  try:
+   event('missing_odds_refresh_started');result=refresh_missing_odds();event('missing_odds_refresh_finished',**result);return result
   finally:release('missing-odds-refresh',token)
  @app.post('/api/v1/refresh-engine')
  def refresh_engine_endpoint(background_tasks:BackgroundTasks,x_deployment_refresh_token:str|None=Header(default=None)):
   token=os.environ.get('TOUCHLINE_DEPLOY_REFRESH_TOKEN')
-  if not token or not x_deployment_refresh_token or not hmac.compare_digest(token,x_deployment_refresh_token):raise HTTPException(404)
+  if not token or not x_deployment_refresh_token or not hmac.compare_digest(token,x_deployment_refresh_token):
+   event('engine_refresh_rejected',logging.WARNING,reason='invalid_token');raise HTTPException(404)
   lease=acquire('engine',seconds=900)
-  if not lease:raise HTTPException(409,'An engine refresh is already running')
+  if not lease:
+   event('engine_refresh_rejected',logging.WARNING,reason='lease_held');raise HTTPException(409,'An engine refresh is already running')
+  event('engine_refresh_started')
   background_tasks.add_task(tick,token=lease)
   return {'ok':True,'started':True}
  return app

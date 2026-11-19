@@ -1,13 +1,13 @@
 """Railway engine supervisor: isolated jobs, bounded runtime and graceful shutdown."""
 import argparse
 import json
-import logging
 import os
 import signal
 import subprocess
 import sys
 import threading
 import time
+from backend.log import configure, event
 
 
 def run_once(mode):
@@ -15,7 +15,9 @@ def run_once(mode):
     from backend.app.engine import tick
     configure()
     initialize()
+    event('engine_cycle_started', mode=mode)
     result = tick()
+    event('engine_cycle_finished', mode=mode, **result)
     print(json.dumps({'event': 'engine_cycle', 'mode': mode, **result}), flush=True)
     return 1 if result.get('errors') else 0
 
@@ -37,9 +39,9 @@ def supervise(mode, stop, interval=300, timeout=None, launch=subprocess.Popen, m
                     process.wait()
                 break
         if timed_out:
-            logging.error(json.dumps({'event': 'engine_timeout', 'mode': mode, 'timeout_seconds': timeout}))
+            event('engine_timeout', 40, mode=mode, timeout_seconds=timeout)
         elif process.returncode and not stop.is_set():
-            logging.error(json.dumps({'event': 'engine_cycle_failed', 'mode': mode, 'exit_code': process.returncode}))
+            event('engine_cycle_failed', 40, mode=mode, exit_code=process.returncode)
         # Missed windows are skipped: never launch a burst of overdue provider calls.
         remaining = max(1, interval - ((monotonic() - started) % interval))
         stop.wait(remaining)
@@ -50,16 +52,13 @@ def main():
     parser.add_argument('--mode', choices=('engine',), default='engine')
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
-    # Provider URLs contain query-string credentials. Never log HTTP request URLs.
-    logging.getLogger('httpx').setLevel(logging.WARNING)
-    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    configure()
     if args.once:
         try:
             return run_once(args.mode)
         except Exception as exc:
             # Exception messages from database/HTTP clients can contain credentials.
-            logging.error(json.dumps({'event': 'engine_unavailable', 'mode': args.mode, 'error_type': type(exc).__name__}))
+            event('engine_unavailable', 40, mode=args.mode, error_type=type(exc).__name__)
             return 1
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
