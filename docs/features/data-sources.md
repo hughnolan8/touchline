@@ -26,9 +26,10 @@ Files: `touchline/sources/*` (`football_data.py` first), `touchline/jobs/ingest.
   (see the `add-data-source` skill), `xi-v2` cannot be fitted and the baseline bets alone.
 - **Odds budget.** A background refresh of all five leagues runs every `ODDS_REFRESH_HOURS`
   (default 24, so 5 credits a day). On top of that, each league is refreshed once when a fixture
-  enters its entry window and once in its closing window. `ODDS_MAX_REQUESTS_PER_DAY` is a hard cap.
-  Production (`fly.toml`) is tuned for the free 500-credit plan: cap 16/day and
-  `ODDS_REFRESH_HOURS=8760` (background refresh off), so credits go to entry and closing prices.
+  enters its entry window and, unless `ODDS_CLOSING_REFRESH=0`, once in its closing window.
+  `ODDS_MAX_REQUESTS_PER_DAY` is a hard cap. Production (`fly.toml`) is tuned for the free
+  500-credit plan: cap 16/day, `ODDS_REFRESH_HOURS=8760` (background refresh off) and
+  `ODDS_CLOSING_REFRESH=0`, so credits go only to entry prices and bets get no closing line or CLV.
   Predictions then show prices only from about an hour before kick-off, and the fixture
   fallback above is effectively off (it rides on the background refresh).
 - **Players across sources.** FotMob names are matched to Understat players by exact normalised
