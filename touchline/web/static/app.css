@@ -72,3 +72,5 @@ input[type="number"] {
 .picks span { display: inline-block; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font-size: 13px; }
 .picks input:checked + span { border-color: var(--accent); background: var(--bg); font-weight: 600; }
 .picks input:focus-visible + span { outline: 2px solid var(--accent); }
+input[type="number"].short { width: 4em; }
+form.actions { align-items: center; margin: 0 0 12px; }
