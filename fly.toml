@@ -5,6 +5,8 @@
 
 app = 'touchline-frosty-pine-4823'
 primary_region = 'lhr'
+# Disk-backed swap (free) so a one-off `touchline backfill` over SSH slows down instead of OOMing.
+swap_size_mb = 512
 
 [build]
 [env]
@@ -33,6 +35,7 @@ primary_region = 'lhr'
     path = '/health'
 
 [[vm]]
+  # 256MB keeps the bill under Fly's $5/month waiver; the app peaks around 150MB.
   size = 'shared-cpu-1x'
-  memory = '512mb'
+  memory = '256mb'
   cpus = 1
