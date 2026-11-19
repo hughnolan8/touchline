@@ -51,3 +51,14 @@ def test_refresh_logs_when_the_provider_returns_no_events(monkeypatch):
 
     assert MobileOdds().refresh([{'competition': 'E0'}], AT) == 0
     assert logged == [('odds_refresh_finished', {'requested': 1, 'matched': 0, 'fixtures': 0})]
+
+
+def test_schedule_imports_upcoming_odds_api_events(monkeypatch):
+    monkeypatch.setenv('TOUCHLINE_ODDS_API_KEY', 'test-key')
+    fixture = {'id': 'fixture', 'home_team': 'Arsenal', 'away_team': 'Chelsea', 'commence_time': '2026-09-24T12:00:00Z'}
+    monkeypatch.setattr(MobileOdds, '_get', lambda _, sport, *args: ([fixture] if sport == 'soccer_epl' else [], SimpleNamespace(headers={'x-requests-remaining': '99'})))
+
+    assert MobileOdds().schedule(AT) == 1
+    with connect() as c:
+        scheduled = c.execute("SELECT source,competition,status FROM matches WHERE source='the-odds-api'").fetchone()
+    assert tuple(scheduled) == ('the-odds-api', 'E0', 'scheduled')

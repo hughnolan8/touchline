@@ -17,8 +17,8 @@ Dashboard -> FastAPI service -> Touchline database
                                  ^
 Five-minute engine -> lease? ---+-- no  -> skip cycle
                     |
-                    +-- yes -> fixtures/results (Understat) -> train models
-                              -> pre-kickoff workflow -> odds (The Odds API)
+                    +-- yes -> fixtures/results (Understat) -> empty window? -> Odds API schedule
+                              -> train models -> pre-kickoff workflow -> odds (The Odds API)
                                                        -> XIs (FotMob)
                                                        -> paper ledger/alerts
                                                        -> Touchline database
@@ -29,8 +29,9 @@ Five-minute engine -> lease? ---+-- no  -> skip cycle
 The initial bootstrap imports one competition-season batch per cycle until the
 current and prior three seasons are present. After bootstrap, a cycle only
 refreshes Understat scores when a bet is overdue or in play; roster backfill is
-kept as a small separate batch. This bounds startup and keeps the public API
-responsive.
+kept as a small separate batch. If the seven-day fixture window is empty, one
+Odds API event-list refresh per UTC day supplies the upcoming schedule. This
+bounds startup and keeps the public API responsive.
 
 For every scheduled fixture in the seven-day horizon, the engine uses these
 pre-kickoff windows. Times are minutes before kick-off.

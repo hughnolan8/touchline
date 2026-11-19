@@ -84,6 +84,31 @@ def test_refresh_missing_odds_only_calls_provider_when_a_market_is_missing(monke
     assert calls[0][1] == at
 
 
+def test_refresh_all_falls_back_to_the_odds_schedule(monkeypatch):
+    at = '2026-09-17T12:00:00+00:00'
+    calls = []
+
+    class Odds:
+        def schedule(self, value):
+            calls.append(('schedule', value))
+            with connect() as connection:
+                ingest_match(connection, 'test', 'fallback', 'E0', 'Arsenal', 'Chelsea', '2026-09-18T12:00:00+00:00', True, 'scheduled', {})
+            return 1
+        def refresh(self, fixtures, value):
+            calls.append(('refresh', fixtures, value))
+            return 0
+        def close(self):
+            pass
+
+    monkeypatch.setattr(engine, 'bootstrap', lambda _: False)
+    monkeypatch.setattr(engine, 'import_scores', lambda _: 0)
+    monkeypatch.setattr(engine, 'train', lambda *_: None)
+    monkeypatch.setattr(engine, 'train_player', lambda *_: None)
+    monkeypatch.setattr(engine, 'MobileOdds', Odds)
+    assert engine.refresh_all(at)['fixtures'] == 0
+    assert [call[0] for call in calls] == ['schedule', 'refresh']
+
+
 def test_tick_only_places_a_bet_after_fotmob_confirms_the_lineup(monkeypatch):
     at = '2026-09-17T12:00:00+00:00'
     with connect() as connection:
