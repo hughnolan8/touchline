@@ -23,8 +23,10 @@ Before committing a code change:
    and create one focused commit.
 6. Push the branch with `git push -u origin HEAD`, then create its pull request
    with `gh pr create --base main --fill` (or confirm the branch already has an
-   open PR). A code task is not complete until it has an open PR; do not merge
-   the PR or push directly to `main` unless the user explicitly asks.
+   open PR). Enable squash auto-merge with `gh pr merge --auto --squash` once
+   the PR is open. A code task is not complete until auto-merge is enabled or
+   the PR has merged. Never bypass required checks or push directly to `main`
+   unless the user explicitly asks.
 
 Do not add unrelated working-tree changes to the commit. In the completion
 message, name the test command, commit SHA, and documentation updated. Local
