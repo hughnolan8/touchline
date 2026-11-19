@@ -1,8 +1,8 @@
 import httpx
 import pytest
 
-from tests.helpers import load
-from touchline.sources import fotmob, odds_api, pushover, understat
+from tests.helpers import FIXTURES, load
+from touchline.sources import football_data, fotmob, odds_api, pushover, understat
 
 
 def test_odds_api_parses_whitelisted_books_and_rejects_bad_events():
@@ -33,11 +33,7 @@ def test_odds_api_errors_hide_the_key():
     assert "secret-key" not in str(error.value)
 
 
-def test_understat_match_and_roster_parsing():
-    done, upcoming = (understat.parse_match(m, "E0") for m in load("understat_matches.json"))
-    assert done.finished and (done.hg, done.ag) == (2, 1)
-    assert done.kickoff == "2026-02-01T15:00:00+00:00"
-    assert not upcoming.finished and upcoming.hg is None
+def test_understat_roster_parsing():
     roster = understat.parse_roster(load("understat_roster.json"))
     assert [(p.name, p.side, p.starter) for p in roster] == [
         ("Bukayo Saka", "home", True),
@@ -46,9 +42,33 @@ def test_understat_match_and_roster_parsing():
     ]
 
 
-def test_understat_season_start():
-    assert understat.season_start("2026-08-01T00:00:00+00:00") == 2026
-    assert understat.season_start("2026-03-01T00:00:00+00:00") == 2025
+def test_football_data_results_and_fixtures():
+    text = (FIXTURES / "football_data.csv").read_text()
+    fixtures, rejected = football_data.parse(text, {"E0"})
+    played, upcoming = fixtures
+    assert (played.home, played.hg, played.ag, played.finished) == ("Liverpool", 4, 2, True)
+    assert played.kickoff == "2025-08-15T19:00:00+00:00"  # 20:00 BST
+    assert not upcoming.finished and upcoming.kickoff == "2026-01-10T15:00:00+00:00"  # GMT
+    assert len(rejected) == 1  # bad date
+
+
+def test_football_data_fetch_follows_redirects_and_names_season():
+    def handler(request):
+        if request.url.host == "www.football-data.co.uk":
+            return httpx.Response(
+                302, headers={"location": "https://football-data.co.uk" + request.url.path}
+            )
+        assert request.url.path == "/mmz4281/2526/E0.csv"
+        return httpx.Response(200, content=(FIXTURES / "football_data.csv").read_bytes())
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+    fixtures, _ = football_data.fetch_results("E0", 2025, client)
+    assert len(fixtures) == 2
+
+
+def test_season_start():
+    assert football_data.season_start("2026-08-01T00:00:00+00:00") == 2026
+    assert football_data.season_start("2026-03-01T00:00:00+00:00") == 2025
 
 
 def test_fotmob_finds_match_and_confirmed_lineup():

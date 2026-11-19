@@ -40,6 +40,13 @@ def refresh_odds(leagues, at: str, fetch=odds_api.fetch) -> int:
             _reserve_odds_request(conn, at)
         events, rejected, remaining = fetch(league, key)
         with connect() as conn:
+            # Only invent fixtures when the results source has none for this league this week;
+            # otherwise an unmatched name is an alias gap and must not create a duplicate.
+            fallback = not conn.execute(
+                "SELECT 1 FROM matches WHERE league=? AND status='scheduled' AND kickoff>? "
+                "AND kickoff<=?",
+                (league, at, horizon),
+            ).fetchone()
             for raw in rejected:
                 quarantine(conn, "odds-api", "unparseable event", raw)
             for event in events:
@@ -50,9 +57,12 @@ def refresh_odds(leagues, at: str, fetch=odds_api.fetch) -> int:
                     quarantine(conn, "odds-api", str(error), event.__dict__)
                     continue
                 match_id = find_match(conn, league, home, away, event.kickoff)
-                if not match_id and at < event.kickoff <= horizon and home != away:
+                if not match_id and fallback and at < event.kickoff <= horizon and home != away:
                     match_id = insert_match(conn, league, home, away, event.kickoff, at)
                 if not match_id:
+                    quarantine(
+                        conn, "odds-api", "no matching fixture", event.__dict__ | {"quotes": []}
+                    )
                     continue
                 conn.executemany(
                     "INSERT OR IGNORE INTO odds_quotes VALUES(?,?,?,?,?,?)",

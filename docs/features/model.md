@@ -11,6 +11,8 @@ Files: `touchline/model/*`, `touchline/jobs/modelling.py`, `touchline/cli.py`
   - attack and defence form over the last 5 matches.
 
   It is trained on historical starting XIs and forecasts only when a confirmed XI exists.
+  It needs Understat rosters, which are unavailable while Understat is down, so for now only
+  the baseline is fitted.
 - **Refits.** Each league is refit when its model is more than 12 hours old. The scheduler
   then forecasts every fixture in the next 7 days with the baseline. At decision time it stores
   both versions' forecasts; the league's `active_model` decides which one bets.

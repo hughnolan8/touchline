@@ -20,11 +20,11 @@ CREATE TABLE IF NOT EXISTS team_aliases (
 CREATE TABLE IF NOT EXISTS matches (
     id TEXT PRIMARY KEY,               -- "<league>:<home>-<away>:<kickoff date>" at creation
     league TEXT NOT NULL,
-    understat_id TEXT UNIQUE,          -- NULL for fixtures known only from The Odds API
+    understat_id TEXT UNIQUE,          -- links Understat rosters (XI model); NULL when unknown
     home TEXT NOT NULL REFERENCES teams(id),
     away TEXT NOT NULL REFERENCES teams(id),
     kickoff TEXT NOT NULL,             -- ISO-8601 UTC
-    status TEXT NOT NULL,              -- scheduled | finished
+    status TEXT NOT NULL,              -- scheduled | finished | postponed
     hg INTEGER,
     ag INTEGER,
     updated_at TEXT NOT NULL

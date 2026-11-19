@@ -121,7 +121,12 @@ def close(conn: sqlite3.Connection, bet: dict, at: str, max_age: int) -> bool:
 
 
 def settle(conn: sqlite3.Connection, at: str) -> int:
-    """Settle open bets whose match has a final score. Idempotent."""
+    """Settle open bets whose match has a final score; void postponed ones. Idempotent."""
+    voided = conn.execute(
+        "UPDATE bets SET status='void', profit=0, settled_at=? WHERE status='open' AND "
+        "match_id IN (SELECT id FROM matches WHERE status='postponed')",
+        (at,),
+    ).rowcount
     due = rows(
         conn,
         "SELECT b.*, m.hg, m.ag FROM bets b JOIN matches m ON m.id=b.match_id "
@@ -135,7 +140,7 @@ def settle(conn: sqlite3.Connection, at: str) -> int:
             "UPDATE bets SET status=?, profit=?, settled_at=? WHERE id=?",
             (status, profit, at, bet["id"]),
         )
-    return len(due)
+    return len(due) + voided
 
 
 def notify(conn: sqlite3.Connection) -> int:
