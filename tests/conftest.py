@@ -13,8 +13,6 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("TOUCHLINE_SCHEDULER", "0")
     for name in (
         "ODDS_API_KEY",
-        "PUSHOVER_APP_TOKEN",
-        "PUSHOVER_USER_KEY",
         "TOUCHLINE_ADMIN_TOKEN",
         "ODDS_MAX_REQUESTS_PER_DAY",
     ):

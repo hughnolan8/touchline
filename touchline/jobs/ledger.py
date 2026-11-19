@@ -1,4 +1,4 @@
-"""Paper ledger: market snapshots, bet decisions, closing lines, settlement and alerts."""
+"""Paper ledger: market snapshots, bet decisions, closing lines and settlement."""
 
 import json
 import sqlite3
@@ -7,7 +7,6 @@ from dataclasses import asdict
 from touchline import betting, strategy
 from touchline.db import dump, rows
 from touchline.jobs.modelling import predict_match
-from touchline.sources import pushover
 from touchline.types import Price, Quote
 
 
@@ -141,32 +140,3 @@ def settle(conn: sqlite3.Connection, at: str) -> int:
             (status, profit, at, bet["id"]),
         )
     return len(due) + voided
-
-
-def notify(conn: sqlite3.Connection) -> int:
-    """Send one Pushover alert per bet or missed fixture; unsent ones retry next tick."""
-    if not pushover.configured():
-        return 0
-    pending = rows(
-        conn,
-        "SELECT d.*, h.name home_name, a.name away_name, b.selection, b.odds, "
-        "b.stake, b.edge, b.bookmaker FROM decisions d JOIN matches m ON "
-        "m.id=d.match_id JOIN teams h ON h.id=m.home JOIN teams a ON "
-        "a.id=m.away LEFT JOIN bets b ON b.match_id=d.match_id WHERE "
-        "d.notified=0 AND d.action IN ('bet','missed')",
-    )
-    sent = 0
-    for d in pending:
-        fixture = f"{d['home_name']} vs {d['away_name']}"
-        if d["action"] == "bet":
-            title = "Touchline bet placed"
-            body = (
-                f"{fixture}\n{d['selection'].title()} @ {d['odds']:.2f} ({d['bookmaker']})\n"
-                f"Stake £{d['stake']:.2f} · Edge {d['edge'] * 100:.1f}%"
-            )
-        else:
-            title, body = "Touchline bet not placed", f"{fixture}\nMissing: {d['reason']}"
-        if pushover.send(title, body):
-            conn.execute("UPDATE decisions SET notified=1 WHERE match_id=?", (d["match_id"],))
-            sent += 1
-    return sent

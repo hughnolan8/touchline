@@ -9,7 +9,6 @@ Files: `touchline/sources/*` (`football_data.py` first), `touchline/jobs/ingest.
 | Understat (`understatapi`) | Per-match player xG/xA for the XI model | Free, unofficial; **down since Nov 2026** |
 | The Odds API v4 `/odds` | UK 1X2 prices from 10 whitelisted books | 1 credit per league request |
 | FotMob (unofficial JSON) | Confirmed starting XIs | Free, unofficial |
-| Pushover | Alerts | Optional |
 
 - **Identity.** football-data.co.uk is the master fixture list. A fixture is the same match when
   league, canonical home/away team ids and kick-off (within 48 h) agree; new ones get
