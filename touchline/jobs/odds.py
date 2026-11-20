@@ -4,6 +4,7 @@ import logging
 import sqlite3
 from datetime import datetime, timedelta
 
+from touchline import credits, strategy
 from touchline.config import config
 from touchline.db import connect, get_setting, quarantine, set_setting
 from touchline.jobs.ingest import find_match, insert_match
@@ -76,3 +77,46 @@ def refresh_odds(leagues, at: str, fetch=odds_api.fetch) -> int:
             set_setting(conn, f"odds_refreshed:{league}", at)
     log.info("odds leagues=%s events=%s", len(set(leagues)), stored)
     return stored
+
+
+def entry_due(at: str) -> set[str]:
+    """Leagues whose planned entry refresh is due now (see `touchline/credits.py`).
+
+    Only fixtures that can still be bet count: scheduled, before their decide cutoff, with a
+    forecast from the active model and no entry price or decision yet.
+    """
+    with connect() as conn:
+        windows, waiting = {}, []
+        candidates = conn.execute(
+            "SELECT m.id, m.league, m.kickoff FROM matches m WHERE m.status='scheduled' "
+            "AND m.kickoff>? AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.match_id=m.id) "
+            "AND NOT EXISTS (SELECT 1 FROM market_snapshots s WHERE s.match_id=m.id "
+            "AND s.kind='entry')",
+            (at,),
+        ).fetchall()
+        for match_id, league, kickoff in candidates:
+            if league not in windows:
+                rules = strategy.load(conn, league)
+                windows[league] = (rules, credits.Window(rules.entry_minutes, rules.decide_cutoff))
+            rules, window = windows[league]
+            forecast = conn.execute(
+                "SELECT 1 FROM predictions WHERE match_id=? AND version=?",
+                (match_id, rules.active_model),
+            ).fetchone()
+            if forecast and kickoff > credits.shift(at, window.decide_cutoff):
+                waiting.append((league, kickoff))
+        horizon = conn.execute("SELECT max(kickoff) FROM matches").fetchone()[0] or at
+        remaining = (get_setting(conn, "odds_api") or {}).get("remaining")
+    plan = credits.slots(waiting, {lg: w for lg, (_, w) in windows.items()}, _margin())
+    cfg = config()
+    available = credits.budget(
+        int(remaining) if remaining is not None else None,
+        at,
+        horizon,
+        credits.next_reset(at, cfg.odds_reset_day),
+    )
+    return credits.due(plan, available, at)
+
+
+def _margin() -> float:
+    return config().tick_seconds / 60 + 1

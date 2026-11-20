@@ -10,8 +10,10 @@ swap_size_mb = 512
 
 [build]
 [env]
-  # Free Odds API plan = 500 credits/month: 16/day x 31 days, no background refresh.
-  ODDS_MAX_REQUESTS_PER_DAY = '16'
+  # Free Odds API plan = 500 credits/month, reset on the 1st. The credit plan paces spending;
+  # the daily cap is only a runaway guard. No background refresh.
+  ODDS_MAX_REQUESTS_PER_DAY = '40'
+  ODDS_RESET_DAY = '1'
   ODDS_REFRESH_HOURS = '8760'
   ODDS_CLOSING_REFRESH = '0'
   TOUCHLINE_DB = '/data/touchline.sqlite3'

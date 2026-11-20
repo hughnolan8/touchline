@@ -8,7 +8,7 @@ Minutes before kick-off, all configurable per league in `Strategy`:
 
 | Window | Action |
 |---|---|
-| 60 → 30 | Refresh that league's odds once, store the **entry** market, then forecast with the active (baseline) model and decide straight away. FotMob XIs are not required. |
+| 60 → 30 | Refresh that league's odds once (when the credit plan picks it; see data-sources), store the **entry** market, then forecast with the active (baseline) model and decide straight away. FotMob XIs are not required. |
 | ≤ 30 with no decision | Record `missed` with what was absent (entry odds). |
 | ≤ 5 with an open bet | Refresh odds, store the **close** market, compute CLV. Skipped when `ODDS_CLOSING_REFRESH=0` (production), leaving CLV blank. |
 | After full time | Settle once football-data.co.uk has the score (idempotent). Void if postponed. |

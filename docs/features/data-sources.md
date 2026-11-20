@@ -24,10 +24,18 @@ Files: `touchline/sources/*` (`football_data.py` first), `touchline/jobs/ingest.
   `matches.understat_id`, which nothing currently sets. Until a working roster source is added
   (see the `add-data-source` skill), `xi-v2` cannot be fitted and the baseline bets alone.
 - **Odds budget.** A background refresh of all five leagues runs every `ODDS_REFRESH_HOURS`
-  (default 24, so 5 credits a day). On top of that, each league is refreshed once when a fixture
-  enters its entry window and, unless `ODDS_CLOSING_REFRESH=0`, once in its closing window.
-  `ODDS_MAX_REQUESTS_PER_DAY` is a hard cap. Production (`fly.toml`) is tuned for the free
-  500-credit plan: cap 16/day, `ODDS_REFRESH_HOURS=8760` (background refresh off) and
+  (default 24, so 5 credits a day). Entry refreshes follow a credit plan (`touchline/credits.py`)
+  that gets the most bettable fixtures per credit:
+  - only fixtures that can still be bet count: forecast by the active model, no entry price or
+    decision yet (so duplicate fixtures without a forecast cost nothing);
+  - one request prices a whole league, so fixtures of a league whose entry windows overlap share
+    one refresh, timed for when the last of them enters its window;
+  - credits left (from the API's `x-requests-remaining`) are paced to the next monthly reset
+    (`ODDS_RESET_DAY`, default 1), holding back a share for days whose fixtures are not yet
+    published; when they cannot cover every slot, the slots with most fixtures win.
+  Unless `ODDS_CLOSING_REFRESH=0`, a league is also refreshed once in its closing window.
+  `ODDS_MAX_REQUESTS_PER_DAY` is a hard runaway guard. Production (`fly.toml`) runs the free
+  500-credit plan with `ODDS_REFRESH_HOURS=8760` (background refresh off) and
   `ODDS_CLOSING_REFRESH=0`, so credits go only to entry prices and bets get no closing line or CLV.
   Predictions then show prices only from about an hour before kick-off, and the fixture
   fallback above is effectively off (it rides on the background refresh).
