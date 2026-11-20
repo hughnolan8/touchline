@@ -135,7 +135,9 @@ def run(at: str, src: Sources) -> dict:
         need_entry = [
             (m, s) for m, s in entry if not ledger.stored_snapshot(conn, m["id"], "entry")
         ]
-    _refresh_odds(src, {m["league"] for m, _ in need_entry}, at, 5 / 60)
+    # Entry refreshes follow the credit plan: shared per league slot, biggest slots first.
+    if need_entry and config().odds_api_key and (due := odds.entry_due(at)):
+        _step(src, "odds", odds.refresh_odds, due, at, src.fetch_odds)
     with connect() as conn:
         summary["entries"] = sum(
             bool(ledger.snapshot(conn, m["id"], "entry", at, s.max_quote_age))

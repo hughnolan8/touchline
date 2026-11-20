@@ -13,6 +13,7 @@ class Config:
     odds_max_requests_per_day: int | None
     odds_refresh_hours: float
     odds_closing_refresh: bool
+    odds_reset_day: int
     admin_token: str | None
     scheduler: bool
     tick_seconds: int
@@ -31,6 +32,7 @@ def config() -> Config:
         odds_max_requests_per_day=_int("ODDS_MAX_REQUESTS_PER_DAY"),
         odds_refresh_hours=float(env("ODDS_REFRESH_HOURS", "24")),
         odds_closing_refresh=env("ODDS_CLOSING_REFRESH", "1") == "1",
+        odds_reset_day=int(env("ODDS_RESET_DAY", "1")),
         admin_token=env("TOUCHLINE_ADMIN_TOKEN"),
         scheduler=env("TOUCHLINE_SCHEDULER", "1") == "1",
         tick_seconds=int(env("TOUCHLINE_TICK_SECONDS", "300")),
