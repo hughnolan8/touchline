@@ -52,8 +52,8 @@ def record(
     return f"{action}: {reason}"
 
 
-def decide(conn: sqlite3.Connection, match: dict, lineup: dict, at: str) -> str:
-    """Forecast with the confirmed XI, then bet at the entry price or record why not."""
+def decide(conn: sqlite3.Connection, match: dict, lineup: dict | None, at: str) -> str:
+    """Forecast (with the XI when given), then bet at the entry price or record why not."""
     if conn.execute("SELECT 1 FROM decisions WHERE match_id=?", (match["id"],)).fetchone():
         return "already decided"
     rules = strategy.load(conn, match["league"])
@@ -98,8 +98,6 @@ def missed(conn: sqlite3.Connection, match: dict, at: str) -> str | None:
     missing = []
     if not stored_snapshot(conn, match["id"], "entry"):
         missing.append("entry odds")
-    if not conn.execute("SELECT 1 FROM lineups WHERE match_id=?", (match["id"],)).fetchone():
-        missing.append("confirmed XI")
     return record(
         conn, match["id"], at, "missed", ", ".join(missing) or "not decided", {"missing": missing}
     )
