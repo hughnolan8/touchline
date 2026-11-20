@@ -21,7 +21,7 @@ class Strategy:
     max_exposure: float = 0.10  # cap on open stakes as a share of bankroll
     max_quote_age: int = 15  # minutes
     entry_minutes: int = 60  # capture the entry price from this many minutes out
-    decide_cutoff: int = 30  # give up waiting for an XI this many minutes out
+    decide_cutoff: int = 30  # record 'missed' if undecided this many minutes out
     close_minutes: int = 5  # capture the closing line inside this window
 
     def __post_init__(self):

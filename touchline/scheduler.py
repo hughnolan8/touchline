@@ -1,14 +1,13 @@
 """The five-minute tick: every automated step, in order, each isolated from the others' errors.
 
 Per fixture (minutes before kickoff, from the league's Strategy):
-  entry_minutes..decide_cutoff  refresh odds once, store the entry price, poll FotMob for the XI,
-                                decide as soon as the XI is confirmed
+  entry_minutes..decide_cutoff  refresh odds once, store the entry price and decide with the
+                                baseline model (no confirmed-XI requirement)
   decide_cutoff..0              record "missed" if no decision was possible
   close_minutes..0              refresh odds and store the closing line for placed bets
   after full time               settle once football-data reports the score
 """
 
-import json
 import logging
 import threading
 from dataclasses import dataclass, field
@@ -144,20 +143,11 @@ def run(at: str, src: Sources) -> dict:
         )
 
     decisions = []
-    for m, _ in entry:
-        with connect() as conn:
-            ready = (
-                ledger.stored_snapshot(conn, m["id"], "entry")
-                and not conn.execute(
-                    "SELECT 1 FROM decisions WHERE match_id=?", (m["id"],)
-                ).fetchone()
-            )
-        if ready and _step(src, "lineup", ingest.capture_lineup, m, at, src.fotmob):
-            with connect() as conn:
-                lineup = conn.execute(
-                    "SELECT payload FROM lineups WHERE match_id=?", (m["id"],)
-                ).fetchone()
-                decisions.append(ledger.decide(conn, m, json.loads(lineup[0]), at))
+    with connect() as conn:
+        for m, _ in entry:
+            decided = conn.execute("SELECT 1 FROM decisions WHERE match_id=?", (m["id"],))
+            if ledger.stored_snapshot(conn, m["id"], "entry") and not decided.fetchone():
+                decisions.append(ledger.decide(conn, m, None, at))
     with connect() as conn:
         for m, mins, s in windows:
             if 0 < mins <= s.decide_cutoff and (result := ledger.missed(conn, m, at)):

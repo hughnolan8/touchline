@@ -85,12 +85,13 @@ class Fakes(scheduler.Sources):
         self.now = AT
 
 
-def test_tick_bets_once_at_entry_with_confirmed_xi(monkeypatch):
+def test_tick_bets_once_at_entry_without_lineup(monkeypatch):
     monkeypatch.setenv("ODDS_API_KEY", "test")
     fakes = Fakes()
     summary = scheduler.tick(AT, fakes)
     assert summary["fitted"] == 1 and summary["entries"] == 1, summary
     assert summary["decisions"] == ["bet: edge above threshold"], summary
+    assert fakes.lineup_calls == 0
     assert scheduler.tick(AT, fakes)["decisions"] == []
     with connect() as conn:
         bets = rows(conn, "SELECT * FROM bets")
@@ -101,7 +102,7 @@ def test_tick_records_missed_without_odds():
     summary = scheduler.tick(AT, Fakes())  # no ODDS_API_KEY: no entry price
     assert summary["decisions"] == []
     later = (datetime.fromisoformat(AT) + timedelta(minutes=25)).isoformat()
-    assert scheduler.tick(later, Fakes())["decisions"] == ["missed: entry odds, confirmed XI"]
+    assert scheduler.tick(later, Fakes())["decisions"] == ["missed: entry odds"]
 
 
 def test_closing_line_and_settlement(monkeypatch):
