@@ -1,0 +1,46 @@
+{
+  "catalogue": [
+    {
+      "marketId": "1.250000001",
+      "marketStartTime": "2026-11-28T15:00:00.000Z",
+      "runners": [
+        {"selectionId": 1096, "runnerName": "Arsenal", "sortPriority": 1},
+        {"selectionId": 48351, "runnerName": "Man Utd", "sortPriority": 2},
+        {"selectionId": 58805, "runnerName": "The Draw", "sortPriority": 3}
+      ]
+    },
+    {
+      "marketId": "1.250000002",
+      "marketStartTime": "2026-11-28T17:30:00.000Z",
+      "runners": [
+        {"selectionId": 56323, "runnerName": "Liverpool", "sortPriority": 1},
+        {"selectionId": 48756, "runnerName": "Nottm Forest", "sortPriority": 2},
+        {"selectionId": 58805, "runnerName": "The Draw", "sortPriority": 3}
+      ]
+    },
+    {
+      "marketId": "1.250000003",
+      "marketStartTime": "2026-11-28T20:00:00.000Z"
+    }
+  ],
+  "books": [
+    {
+      "marketId": "1.250000001",
+      "status": "OPEN",
+      "inplay": false,
+      "runners": [
+        {"selectionId": 1096, "status": "ACTIVE", "ex": {"availableToBack": [{"price": 2.1, "size": 350.0}]}},
+        {"selectionId": 48351, "status": "ACTIVE", "ex": {"availableToBack": [{"price": 3.9, "size": 1.5}]}},
+        {"selectionId": 58805, "status": "ACTIVE", "ex": {"availableToBack": [{"price": 3.6, "size": 120.0}]}}
+      ]
+    },
+    {
+      "marketId": "1.250000002",
+      "status": "SUSPENDED",
+      "inplay": false,
+      "runners": [
+        {"selectionId": 56323, "status": "ACTIVE", "ex": {"availableToBack": [{"price": 1.5, "size": 900.0}]}}
+      ]
+    }
+  ]
+}

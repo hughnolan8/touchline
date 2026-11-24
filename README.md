@@ -23,6 +23,7 @@ a database with synthetic data for UI work.
 | Variable | Purpose |
 |---|---|
 | `ODDS_API_KEY` | The Odds API key (odds are skipped without it) |
+| `BETFAIR_APP_KEY`, `BETFAIR_USERNAME`, `BETFAIR_PASSWORD` | Betfair Exchange login for last-chance entry prices (skipped without them) |
 | `ODDS_MAX_REQUESTS_PER_DAY` | Optional daily credit cap |
 | `ODDS_REFRESH_HOURS` | Background odds refresh interval (default 24) |
 | `ODDS_CLOSING_REFRESH` | `0` skips the closing-line odds refresh (default `1`) |
