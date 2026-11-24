@@ -9,14 +9,15 @@ class League:
     name: str
     understat: str
     odds_sport: str
+    betfair_competition: str
 
 
 LEAGUES = (
-    League("E0", "Premier League", "EPL", "soccer_epl"),
-    League("SP1", "La Liga", "La_Liga", "soccer_spain_la_liga"),
-    League("D1", "Bundesliga", "Bundesliga", "soccer_germany_bundesliga"),
-    League("I1", "Serie A", "Serie_A", "soccer_italy_serie_a"),
-    League("F1", "Ligue 1", "Ligue_1", "soccer_france_ligue_one"),
+    League("E0", "Premier League", "EPL", "soccer_epl", "10932509"),
+    League("SP1", "La Liga", "La_Liga", "soccer_spain_la_liga", "117"),
+    League("D1", "Bundesliga", "Bundesliga", "soccer_germany_bundesliga", "59"),
+    League("I1", "Serie A", "Serie_A", "soccer_italy_serie_a", "81"),
+    League("F1", "Ligue 1", "Ligue_1", "soccer_france_ligue_one", "55"),
 )
 BY_CODE = {league.code: league for league in LEAGUES}
 

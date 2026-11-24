@@ -64,6 +64,19 @@ class Fakes(scheduler.Sources):
             return [OddsEvent("E0", "Arsenal", "Aston Villa", KICKOFF, quotes)], [], "99"
 
         self.fetch_odds = fetch_odds
+        self.betfair_calls = []
+
+        def fetch_betfair(league, app_key, username, password, at, horizon):
+            self.betfair_calls.append((league, at))
+            if league != "E0":
+                return [], []
+            quotes = [
+                Quote("Betfair Exchange", s, o, at)
+                for s, o in zip(("home", "draw", "away"), odds, strict=True)
+            ]
+            return [OddsEvent("E0", "Arsenal", "Aston Villa", KICKOFF, quotes)], []
+
+        self.fetch_betfair = fetch_betfair
         fake = self
 
         class FotMob:
@@ -158,3 +171,31 @@ def test_unplayed_fixture_is_postponed_and_its_bet_voided(monkeypatch):
     with connect() as conn:
         bet = rows(conn, "SELECT status, profit FROM bets")[0]
     assert bet == {"status": "void", "profit": 0}
+
+
+def betfair_env(monkeypatch):
+    for name in ("BETFAIR_APP_KEY", "BETFAIR_USERNAME", "BETFAIR_PASSWORD"):
+        monkeypatch.setenv(name, "test")
+
+
+def test_betfair_prices_fixture_left_unpriced_near_the_cutoff(monkeypatch):
+    betfair_env(monkeypatch)  # no ODDS_API_KEY: the credit plan prices nothing
+    fakes = Fakes()
+    assert scheduler.tick(AT, fakes)["entries"] == 0  # 50 min out: too early for Betfair
+    assert fakes.betfair_calls == []
+    last_chance = "2026-01-10T14:20:00+00:00"  # 40 min out, decide cutoff at 30
+    summary = scheduler.tick(last_chance, fakes)
+    assert fakes.betfair_calls == [("E0", last_chance)]
+    assert summary["entries"] == 1 and summary["decisions"] == ["bet: edge above threshold"]
+    with connect() as conn:
+        bet = rows(conn, "SELECT bookmaker FROM bets")[0]
+    assert bet["bookmaker"] == "Betfair Exchange"
+
+
+def test_betfair_skipped_when_the_odds_api_priced_the_fixture(monkeypatch):
+    betfair_env(monkeypatch)
+    monkeypatch.setenv("ODDS_API_KEY", "test")
+    fakes = Fakes()
+    fakes.now = "2026-01-10T14:20:00+00:00"
+    assert scheduler.tick(fakes.now, fakes)["entries"] == 1
+    assert fakes.betfair_calls == []

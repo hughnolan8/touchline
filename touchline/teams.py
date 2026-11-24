@@ -105,6 +105,15 @@ ALIASES = {
     "SV 07 Elversberg": "Elversberg",
     "Stade Rennais FC 1901": "Rennes",
     "US Sassuolo Calcio": "Sassuolo",
+    # Betfair Exchange spellings
+    "Man Utd": "Man United",
+    "Nottm Forest": "Nott'm Forest",
+    "Athletic Bilbao": "Ath Bilbao",
+    "Real Betis": "Betis",
+    "Espanyol": "Espanol",
+    "Mgladbach": "M'gladbach",
+    "FC Koln": "Koln",
+    "Paris St-G": "Paris SG",
 }
 
 _SUFFIX = re.compile(r"^(?:FC |AFC )|(?: FC| AFC| CF)$")

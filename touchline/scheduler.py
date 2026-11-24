@@ -2,7 +2,8 @@
 
 Per fixture (minutes before kickoff, from the league's Strategy):
   entry_minutes..decide_cutoff  refresh odds once, store the entry price and decide with the
-                                baseline model (no confirmed-XI requirement)
+                                baseline model (no confirmed-XI requirement); fixtures still
+                                unpriced in the last two ticks before the cutoff get Betfair
   decide_cutoff..0              record "missed" if no decision was possible
   close_minutes..0              refresh odds and store the closing line for placed bets
   after full time               settle once football-data reports the score
@@ -18,7 +19,7 @@ from touchline.config import config
 from touchline.db import connect, get_setting, job_run, minutes_until, now, rows
 from touchline.jobs import ingest, ledger, modelling, odds
 from touchline.leagues import LEAGUES
-from touchline.sources import football_data, fotmob, odds_api, understat
+from touchline.sources import betfair, football_data, fotmob, odds_api, understat
 
 log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -35,6 +36,7 @@ class Sources:
     fetch_fixtures: object = football_data.fetch_fixtures
     fetch_roster: object = understat.fetch_roster
     fetch_odds: object = odds_api.fetch
+    fetch_betfair: object = betfair.fetch
     fotmob: object = fotmob.FotMob
     errors: list = field(default_factory=list)
 
@@ -138,6 +140,8 @@ def run(at: str, src: Sources) -> dict:
     # Entry refreshes follow the credit plan: shared per league slot, biggest slots first.
     if need_entry and config().odds_api_key and (due := odds.entry_due(at)):
         _step(src, "odds", odds.refresh_odds, due, at, src.fetch_odds)
+    if need_entry and config().betfair_app_key and (late := odds.betfair_due(need_entry, at)):
+        _step(src, "betfair", odds.refresh_betfair, late, at, src.fetch_betfair)
     with connect() as conn:
         summary["entries"] = sum(
             bool(ledger.snapshot(conn, m["id"], "entry", at, s.max_quote_age))

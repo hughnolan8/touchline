@@ -16,6 +16,7 @@ no spending cap, so adding machines, memory or a dedicated IPv4 will start to co
 fly launch --no-deploy --copy-config          # pick an app name; it is written to fly.toml
 fly volumes create touchline_data --region lhr --size 1
 fly secrets set ODDS_API_KEY=... TOUCHLINE_ADMIN_TOKEN=...
+fly secrets set BETFAIR_APP_KEY=... BETFAIR_USERNAME=... BETFAIR_PASSWORD=...  # optional fallback
 fly deploy
 fly ssh console -C "touchline backfill --seasons 4"
 ```

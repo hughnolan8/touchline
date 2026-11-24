@@ -8,6 +8,7 @@ Files: `touchline/sources/*` (`football_data.py` first), `touchline/jobs/ingest.
 | football-data.co.uk CSVs | Results (season files) and next week's fixtures (`fixtures.csv`) | Free, no key |
 | Understat (`understatapi`) | Per-match player xG/xA for the XI model | Free, unofficial; **down since Nov 2026** |
 | The Odds API v4 `/odds` | UK 1X2 prices from 10 whitelisted books | 1 credit per league request |
+| Betfair Exchange API | Best back prices on MATCH_ODDS, net of 5% commission | Free delayed app key + account login; no credits |
 | FotMob (unofficial JSON) | Confirmed starting XIs | Free, unofficial |
 
 - **Identity.** football-data.co.uk is the master fixture list. A fixture is the same match when
@@ -39,5 +40,12 @@ Files: `touchline/sources/*` (`football_data.py` first), `touchline/jobs/ingest.
   `ODDS_CLOSING_REFRESH=0`, so credits go only to entry prices and bets get no closing line or CLV.
   Predictions then show prices only from about an hour before kick-off, and the fixture
   fallback above is effectively off (it rides on the background refresh).
+- **Betfair fallback.** When `BETFAIR_APP_KEY`, `BETFAIR_USERNAME` and `BETFAIR_PASSWORD` are
+  set, any fixture still without an entry price in the last two ticks before its decide cutoff
+  (by default 30–41 minutes before kick-off) is priced from the Betfair Exchange, one login and
+  two requests per league. The Odds API credit plan runs first and is unchanged; Betfair only
+  fills what it left, so bets keep coming when credits run out. Exchange prices are stored as
+  bookmaker "Betfair Exchange", net of 5% commission, and only with at least £2 available to
+  back. Team spellings and quarantine use the source name `betfair`.
 - **Players across sources.** FotMob names are matched to Understat players by exact normalised
   name within the team. Unmatched players count at the league baseline rate.

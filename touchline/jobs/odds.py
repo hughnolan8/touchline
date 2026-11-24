@@ -1,4 +1,4 @@
-"""The Odds API -> odds_quotes, under the daily credit cap. Also a fixture fallback."""
+"""Odds API (credit-planned) and Betfair (last chance) -> odds_quotes; also a fixture fallback."""
 
 import logging
 import sqlite3
@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 
 from touchline import credits, strategy
 from touchline.config import config
-from touchline.db import connect, get_setting, quarantine, set_setting
+from touchline.db import connect, get_setting, minutes_until, quarantine, set_setting
+from touchline.jobs import ledger
 from touchline.jobs.ingest import find_match, insert_match
-from touchline.sources import odds_api
+from touchline.sources import betfair, odds_api
 from touchline.teams import canonical
 
 log = logging.getLogger(__name__)
@@ -41,41 +42,60 @@ def refresh_odds(leagues, at: str, fetch=odds_api.fetch) -> int:
             _reserve_odds_request(conn, at)
         events, rejected, remaining = fetch(league, key)
         with connect() as conn:
-            # Only invent fixtures when the results source has none for this league this week;
-            # otherwise an unmatched name is an alias gap and must not create a duplicate.
-            fallback = not conn.execute(
-                "SELECT 1 FROM matches WHERE league=? AND status='scheduled' AND kickoff>? "
-                "AND kickoff<=?",
-                (league, at, horizon),
-            ).fetchone()
-            for raw in rejected:
-                quarantine(conn, "odds-api", "unparseable event", raw)
-            for event in events:
-                try:
-                    home = canonical(conn, "odds-api", event.home)
-                    away = canonical(conn, "odds-api", event.away)
-                except ValueError as error:
-                    quarantine(conn, "odds-api", str(error), event.__dict__)
-                    continue
-                match_id = find_match(conn, league, home, away, event.kickoff)
-                if not match_id and fallback and at < event.kickoff <= horizon and home != away:
-                    match_id = insert_match(conn, league, home, away, event.kickoff, at)
-                if not match_id:
-                    quarantine(
-                        conn, "odds-api", "no matching fixture", event.__dict__ | {"quotes": []}
-                    )
-                    continue
-                conn.executemany(
-                    "INSERT OR IGNORE INTO odds_quotes VALUES(?,?,?,?,?,?)",
-                    [
-                        (match_id, q.bookmaker, q.selection, q.odds, q.quoted_at, at)
-                        for q in event.quotes
-                    ],
-                )
-                stored += 1
+            stored += _store(conn, "odds-api", league, events, rejected, at, horizon)
             set_setting(conn, "odds_api", {"remaining": remaining, "checked_at": at})
             set_setting(conn, f"odds_refreshed:{league}", at)
     log.info("odds leagues=%s events=%s", len(set(leagues)), stored)
+    return stored
+
+
+def refresh_betfair(leagues, at: str, fetch=betfair.fetch) -> int:
+    """Last-chance entry prices from the Betfair Exchange (no credits): the scheduler calls this
+    for fixtures the Odds API plan has left unpriced just before their decide cutoff."""
+    cfg = config()
+    creds = (cfg.betfair_app_key, cfg.betfair_username, cfg.betfair_password)
+    if not all(creds):
+        raise betfair.BetfairError("Betfair credentials are not configured")
+    horizon = (datetime.fromisoformat(at) + timedelta(days=7)).isoformat()
+    stored = 0
+    for league in sorted(set(leagues)):
+        events, rejected = fetch(league, *creds, at, horizon)
+        with connect() as conn:
+            stored += _store(conn, "betfair", league, events, rejected, at, horizon)
+            set_setting(conn, f"betfair_refreshed:{league}", at)
+    log.info("betfair leagues=%s events=%s", len(set(leagues)), stored)
+    return stored
+
+
+def _store(conn, source: str, league: str, events, rejected, at: str, horizon: str) -> int:
+    """Resolve teams, join to fixtures and store quotes. Returns events stored."""
+    # Only invent fixtures when the results source has none for this league this week;
+    # otherwise an unmatched name is an alias gap and must not create a duplicate.
+    fallback = not conn.execute(
+        "SELECT 1 FROM matches WHERE league=? AND status='scheduled' AND kickoff>? AND kickoff<=?",
+        (league, at, horizon),
+    ).fetchone()
+    stored = 0
+    for raw in rejected:
+        quarantine(conn, source, "unparseable event", raw)
+    for event in events:
+        try:
+            home = canonical(conn, source, event.home)
+            away = canonical(conn, source, event.away)
+        except ValueError as error:
+            quarantine(conn, source, str(error), event.__dict__)
+            continue
+        match_id = find_match(conn, league, home, away, event.kickoff)
+        if not match_id and fallback and at < event.kickoff <= horizon and home != away:
+            match_id = insert_match(conn, league, home, away, event.kickoff, at)
+        if not match_id:
+            quarantine(conn, source, "no matching fixture", event.__dict__ | {"quotes": []})
+            continue
+        conn.executemany(
+            "INSERT OR IGNORE INTO odds_quotes VALUES(?,?,?,?,?,?)",
+            [(match_id, q.bookmaker, q.selection, q.odds, q.quoted_at, at) for q in event.quotes],
+        )
+        stored += 1
     return stored
 
 
@@ -116,6 +136,17 @@ def entry_due(at: str) -> set[str]:
         credits.next_reset(at, cfg.odds_reset_day),
     )
     return credits.due(plan, available, at)
+
+
+def betfair_due(need_entry: list, at: str) -> set[str]:
+    """Leagues with a fixture still unpriced within two ticks of its decide cutoff."""
+    with connect() as conn:
+        return {
+            m["league"]
+            for m, s in need_entry
+            if minutes_until(m["kickoff"], at) <= s.decide_cutoff + 2 * _margin() - 1
+            and not ledger.snapshot(conn, m["id"], "entry", at, s.max_quote_age)
+        }
 
 
 def _margin() -> float:

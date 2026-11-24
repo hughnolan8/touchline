@@ -1,8 +1,10 @@
+import json
+
 import httpx
 import pytest
 
 from tests.helpers import FIXTURES, load
-from touchline.sources import football_data, fotmob, odds_api, understat
+from touchline.sources import betfair, football_data, fotmob, odds_api, understat
 
 
 def test_odds_api_parses_whitelisted_books_and_rejects_bad_events():
@@ -87,3 +89,61 @@ def test_fotmob_unconfirmed_lineup_is_ignored():
     payload = load("fotmob_details.json")
     payload["content"]["lineup"]["confirmed"] = False
     assert fotmob.parse_lineup(payload) is None
+
+
+AT_BF = "2026-11-28T14:20:00+00:00"
+
+
+def test_betfair_parses_open_markets_net_of_commission():
+    payload = load("betfair.json")
+    events, rejected = betfair.parse(payload["catalogue"], payload["books"], "E0", AT_BF)
+    assert [m["marketId"] for m in rejected] == ["1.250000003"]
+    first, suspended = events
+    assert (first.home, first.away, first.kickoff) == (
+        "Arsenal",
+        "Man Utd",
+        "2026-11-28T15:00:00+00:00",
+    )
+    # Man Utd's 3.9 has too little money behind it; the rest pay 95% of the profit.
+    assert {(q.selection, q.odds, q.bookmaker) for q in first.quotes} == {
+        ("home", 2.045, "Betfair Exchange"),
+        ("draw", 3.47, "Betfair Exchange"),
+    }
+    assert all(q.quoted_at == AT_BF for q in first.quotes)
+    assert suspended.away == "Nottm Forest" and suspended.quotes == []
+
+
+def test_betfair_fetch_logs_in_then_lists_and_prices_markets():
+    payload, paths = load("betfair.json"), []
+
+    def handler(request):
+        paths.append(request.url.path)
+        assert request.headers["X-Application"] == "app"
+        if request.url.host == "identitysso.betfair.com":
+            return httpx.Response(200, json={"status": "SUCCESS", "token": "tok"})
+        assert request.headers["X-Authentication"] == "tok"
+        body = json.loads(request.content)
+        if request.url.path.endswith("listMarketCatalogue/"):
+            assert body["filter"]["competitionIds"] == ["10932509"]
+            return httpx.Response(200, json=payload["catalogue"])
+        assert len(body["marketIds"]) == 3
+        return httpx.Response(200, json=payload["books"])
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    events, rejected = betfair.fetch("E0", "app", "user", "pw", AT_BF, "2026-12-05", client)
+    assert len(events) == 2 and len(rejected) == 1
+    assert paths[0] == "/api/login" and len(paths) == 3
+
+
+def test_betfair_errors_hide_credentials():
+    def handler(request):
+        return httpx.Response(200, json={"status": "FAIL", "error": "INVALID_USERNAME_OR_PASSWORD"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(betfair.BetfairError) as error:
+        betfair.fetch("E0", "secret-app", "user", "secret-pw", AT_BF, "2026-12-05", client)
+    assert "secret" not in str(error.value) and "INVALID_USERNAME" in str(error.value)
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    with pytest.raises(betfair.BetfairError) as error:
+        betfair.fetch("E0", "secret-app", "user", "secret-pw", AT_BF, "2026-12-05", client)
+    assert "secret" not in str(error.value) and "betfair.com" not in str(error.value)

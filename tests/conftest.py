@@ -15,6 +15,9 @@ def isolated(tmp_path, monkeypatch):
         "ODDS_API_KEY",
         "TOUCHLINE_ADMIN_TOKEN",
         "ODDS_MAX_REQUESTS_PER_DAY",
+        "BETFAIR_APP_KEY",
+        "BETFAIR_USERNAME",
+        "BETFAIR_PASSWORD",
     ):
         monkeypatch.delenv(name, raising=False)
 
